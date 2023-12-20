@@ -299,14 +299,14 @@ RUN /etc/dockerbuild/BuildScript ImageExport "/tmp/dockerbuild/d2dcn_gui_dwi/10.
 ADD ["https://github.com/junegunn/fzf/archive/master.zip", "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers/fzf.zip"]
 
 
-# Build source '20.- Build layers/10.- BuildParams.BuildExport.source'
-COPY ["20.- Build layers/10.- BuildParams.BuildExport.source", "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers/10.- BuildParams.BuildExport.source"]
-RUN /etc/dockerbuild/BuildScript BuildExport "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers" "10.- BuildParams.BuildExport.source" True
-
-
 # Build step '20.- Build layers/20.- requirements.Dockerfile.sh'
 COPY ["20.- Build layers/20.- requirements.Dockerfile.sh", "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers/20.- requirements.Dockerfile.sh"]
 RUN /etc/dockerbuild/BuildScript Dockerfile.sh "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers" "20.- requirements.Dockerfile.sh" True
+
+
+# Build step '20.- Build layers/25.- python.Dockerfile.sh'
+COPY ["20.- Build layers/25.- python.Dockerfile.sh", "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers/25.- python.Dockerfile.sh"]
+RUN /etc/dockerbuild/BuildScript Dockerfile.sh "/tmp/dockerbuild/d2dcn_gui_dwi/20.- Build layers" "25.- python.Dockerfile.sh" True
 
 
 # Build step '20.- Build layers/30.- SystemConfig.Dockerfile.sh'
