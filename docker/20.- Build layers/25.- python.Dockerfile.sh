@@ -3,8 +3,11 @@ set -e
 
 
 # Upgrade system
-#PACKAGES=()
-#PACKAGES+=(wget)
+PACKAGES=()
+PACKAGES+=(psutil)
+PACKAGES+=(wheel)
+PACKAGES+=(setuptools)
+PACKAGES+=(twine)
 
 # Install all
-#pip3 install -y ${PACKAGES[@]}
+pip3 install ${PACKAGES[@]}

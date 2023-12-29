@@ -1,3 +1,5 @@
+#! /usr/bin/python3
+
 import sys
 import unittest
 import d2dcn
@@ -34,7 +36,13 @@ class Testd2dUnitTest(unittest.TestCase):
         self.assertTrue(len(ip.split(".")) == 4)
 
 
-    def dis_test_Command1(self):
+    def test3_d2dcnInfoAsignation(self):
+
+        test1= d2dcn.d2d()
+        self.assertTrue(test1.mac != "")
+        self.assertTrue(test1.service != "")
+
+
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()

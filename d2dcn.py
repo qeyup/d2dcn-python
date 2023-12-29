@@ -4,6 +4,8 @@ import socket
 import struct
 import threading
 import time
+import uuid
+import psutil
 
 
 class d2dConstants():
@@ -96,7 +98,6 @@ class d2dBrokerDiscover():
         self.__mcast_send_respond.close()
 
 
-
 class d2dCommand():
 
     def __init__(self):
@@ -133,12 +134,17 @@ class d2dCommand():
 class d2d():
 
     def __init__(self):
-        self.__mac = ""
-        self.__service = ""
+        self.__mac = hex(uuid.getnode()).replace("0x", "")
+
+        process = psutil.Process(os.getpid())
+        process_name = process.name()
+        self.__service = process_name.split(".")[0]
+
 
     @property
     def service(self):
         return self.__service
+
 
     @property
     def mac(self):
