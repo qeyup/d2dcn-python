@@ -12,7 +12,8 @@ class d2dConstants():
     MCAST_DISCOVER_CLIENT_PORT = 5006
     MQTT_BROKER_PORT = 1883
     MULTICAST_TTL = 2
-    DISCOVER_MSG = b"Where is broker?"
+    DISCOVER_MSG_REQUEST = b"Who's broker?"
+    DISCOVER_MSG_RESPONSE = b"I'm broker"
 
 
 class mcast():
@@ -23,7 +24,7 @@ class mcast():
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.__sock.bind((ip, port))
-        self.__sock.settimeout(1)
+        self.__sock.settimeout(0.1)
 
         mreq = struct.pack("4sl", socket.inet_aton(ip), socket.INADDR_ANY)
         self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
@@ -38,15 +39,15 @@ class mcast():
         current_epoch_time = int(time.time())
         while True:
             try:
-                read = self.__sock.recv(1024)
-                return read
+                data, (ip, port) = self.__sock.recvfrom(4096)
+                return data, ip, port
 
             except socket.timeout:
                 if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
-                    return None
+                    return None, None, None
 
             except:
-                return None
+                return None, None, None
 
 
     def send(self, msg):
@@ -72,12 +73,12 @@ class d2dBrokerDiscover():
     def __run(mcast_listen_request, mcast_send_respond):
 
         while True:
-            read = mcast_listen_request.read()
+            read, ip, port = mcast_listen_request.read()
             if not read:
                 break
 
-            if read == d2dConstants.DISCOVER_MSG:
-                mcast_send_respond.send(b"192.168.1.1")
+            if read == d2dConstants.DISCOVER_MSG_REQUEST:
+                mcast_send_respond.send(d2dConstants.DISCOVER_MSG_RESPONSE)
 
 
     def run(self, thread=False):
@@ -148,12 +149,12 @@ class d2d():
         mcast_send_request = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_SERVER_PORT)
         mcast_listen_respond = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_CLIENT_PORT)
 
-        mcast_send_request.send(d2dConstants.DISCOVER_MSG)
-        response = mcast_listen_respond.read(5)
-        if response:
-            return response.decode()
+        mcast_send_request.send(d2dConstants.DISCOVER_MSG_REQUEST)
+        response, ip, port = mcast_listen_respond.read(5)
+        if response == d2dConstants.DISCOVER_MSG_RESPONSE:
+            return ip
         else:
-            None
+            return None
 
 
     def addServiceCommand(self, cmdCallback, name:str, args:dict, result:dict, type:str="")-> bool:
