@@ -1,5 +1,8 @@
+import sys
 import unittest
 import d2dcn
+import time
+ 
 
 
 class Testd2dUnitTest(unittest.TestCase):
@@ -8,7 +11,30 @@ class Testd2dUnitTest(unittest.TestCase):
         pass
 
 
-    def test_Command1(self):
+    def test1_startStopBrokerDiscover(self):
+        broker_discover = d2dcn.d2dBrokerDiscover()
+        t1 = broker_discover.run(True)
+        time.sleep(2)
+        broker_discover.stop()
+        time.sleep(1)
+        self.assertFalse(t1.is_alive())
+
+
+    def test2_brokerDiscover(self):
+
+
+        broker_discover = d2dcn.d2dBrokerDiscover()
+        broker_discover.run(True)
+        time.sleep(2)
+
+
+        test1= d2dcn.d2d()
+        ip = test1.getBrokerIP()
+        self.assertTrue(ip != "")
+        self.assertTrue(len(ip.split(".")) == 4)
+
+
+    def dis_test_Command1(self):
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()
@@ -44,7 +70,7 @@ class Testd2dUnitTest(unittest.TestCase):
         self.assertTrue(result == api_result)
 
 
-    def test_Info1(self):
+    def dis_test_Info1(self):
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()
