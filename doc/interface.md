@@ -3,7 +3,7 @@
 
 ## Device info
 
-- ServiceInfo/MAC/DeviceInfo:
+- d2dcn/MAC/DeviceInfo:
     {
         "name": **DEVICE_NAME**
     }
@@ -11,7 +11,7 @@
 
 ## Device command API info
 
-- ServiceInfo/MAC/**SERVICE_NAME**/Commands/**COMMAND_TYPE**/**COMMAND_NAME**:
+- d2dcn/MAC/**SERVICE_NAME**/command/**COMMAND_TYPE**/**COMMAND_NAME**:
     {
         "protocol": "json-udp",
         "ip": **IP**,
@@ -30,7 +30,7 @@
 
 ## Device shared data info
 
-- ServiceInfo/MAC/**SERVICE_NAME**/info/**INFO_TYPE**/**PARAM_NAME**:
+- d2dcn/MAC/**SERVICE_NAME**/info/**INFO_TYPE**/**PARAM_NAME**:
     {
         "value": **PARAM_NAME**,
         "type": "int",

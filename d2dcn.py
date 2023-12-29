@@ -140,6 +140,7 @@ class d2d():
         process_name = process.name()
         self.__service = process_name.split(".")[0]
 
+        self.__client = None
 
     @property
     def service(self):
@@ -149,6 +150,53 @@ class d2d():
     @property
     def mac(self):
         return self.__mac
+
+
+    def __brokerDisconnected(self):
+        self.__client = None
+
+
+    def __brokerMessaheReceived(self, message):
+
+        try:
+            json_message = json.loads(message.payload)
+        except:
+            return
+
+        topic_split = message.split("/")
+        if len(topic_split) != 6:
+            return
+
+        prefix = topic_split[0]
+        mac = topic_split[1]
+        service = topic_split[2]
+        mode = topic_split[3]
+        type = topic_split[4]
+        name = topic_split[5]
+
+
+    def __checkBrokerConnection(self):
+
+        if self.__client:
+            return True
+
+        broker_ip = self.getBrokerIP()
+        if not broker_ip:
+            return False
+
+
+        client = paho.mqtt.client.Client()
+        try:
+            client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
+        except:
+            return False
+
+        client.on_message = lambda client, userdata, message : self.__brokerMessaheReceived(message)
+        client.on_disconnect = lambda : self.__brokerDisconnected()
+        client.loop_start()
+
+        self.__client = client
+        return True
 
 
     def getBrokerIP(self) -> str:
@@ -163,7 +211,29 @@ class d2d():
             return None
 
 
-    def addServiceCommand(self, cmdCallback, name:str, args:dict, result:dict, type:str="")-> bool:
+    def addServiceCommand(self, cmdCallback, name:str, params:dict, response:dict, type:str="")-> bool:
+
+        if not self.__checkBrokerConnection():
+            return False
+
+        if type == "":
+            type = "generic"
+
+        mqtt_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/command/" + type + "/" + name
+
+        mqtt_msg = {}
+        mqtt_msg["protocol"] = "json-udp"
+        mqtt_msg["ip"] = ""
+        mqtt_msg["port"] = ""
+        mqtt_msg["params"] = params
+        mqtt_msg["response"] = response
+
+
+        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg), qos=0, retain=True)
+
+        #self.__command_map[mqtt_path] = cmdCallback
+
+
         return True
 
 

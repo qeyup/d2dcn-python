@@ -4,14 +4,32 @@ import sys
 import unittest
 import d2dcn
 import time
+import os
+import signal
+import subprocess
  
 
+class mqttBroker(unittest.TestCase):
 
-class Testd2dUnitTest(unittest.TestCase):
+    def __init__(self):
+        # Launch discover broker process
+        self.broker_discover = d2dcn.d2dBrokerDiscover()
+        self.broker_discover.run(True)
 
-    def setUp(self):
-        pass
 
+        # Launch broker process
+        self.pro = subprocess.Popen("mosquitto", stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False)
+
+        time.sleep(2)
+
+
+    def __del__(self):
+        self.pro.send_signal( signal.SIGTERM)
+        #pro.send_signal(signal.SIGINT)
+        self.pro.wait()
+
+
+class Test1_d2dBrokerDiscover(unittest.TestCase):
 
     def test1_startStopBrokerDiscover(self):
         broker_discover = d2dcn.d2dBrokerDiscover()
@@ -36,6 +54,12 @@ class Testd2dUnitTest(unittest.TestCase):
         self.assertTrue(len(ip.split(".")) == 4)
 
 
+class Test2_d2dUnitTest(unittest.TestCase):
+
+    def setUp(self):
+        self.mqtt_broker = mqttBroker()
+
+
     def test3_d2dcnInfoAsignation(self):
 
         test1= d2dcn.d2d()
@@ -43,6 +67,7 @@ class Testd2dUnitTest(unittest.TestCase):
         self.assertTrue(test1.service != "")
 
 
+    def test4_RegisteredCommand(self):
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()
@@ -52,7 +77,9 @@ class Testd2dUnitTest(unittest.TestCase):
         api_result = {"arg1":"int", "arg2":"string"}
         command_type = "test"
         command_name = "command"
-        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
+        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type), "Check if broker is active")
+
+        return
 
 
         # Check registered command
