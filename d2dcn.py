@@ -290,23 +290,10 @@ class d2d():
         if not self.__checkBrokerConnection():
             return False
 
-        mqtt_path = d2dConstants.MQTT_PREFIX + "/"
-
-        mqtt_path += self.__mac + "/"
-
-        mqtt_path += self.__service + "/"
-
-        mqtt_path += d2dConstants.COMMAND_LEVEL + "/"
-
         if type == "":
-            mqtt_path += d2dConstants.GENERIC_TYPE + "/"
-        else:
-            mqtt_path += type + "/"
+            type = d2dConstants.GENERIC_TYPE
 
-        mqtt_path += name
-
-        mqtt_path = mqtt_path.replace("#", "")
-
+        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, type, d2dConstants.COMMAND_LEVEL, name)
 
         mqtt_msg = {}
         mqtt_msg[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
@@ -329,31 +316,7 @@ class d2d():
         if not self.__checkBrokerConnection():
             return False
 
-        mqtt_path = d2dConstants.MQTT_PREFIX + "/"
-
-        if mac != "":
-            mqtt_path += mac + "/"
-        else:
-            mqtt_path += "+/"
-
-        if service != "":
-            mqtt_path += service + "/"
-        else:
-            mqtt_path += "+/"
-
-        mqtt_path += d2dConstants.COMMAND_LEVEL + "/"
-
-        if type != "":
-            mqtt_path += type + "/"
-        else:
-            mqtt_path += "+/"
-
-        if command != "":
-            mqtt_path += command + "/"
-        else:
-            mqtt_path += "+"
-
-        mqtt_path = mqtt_path.replace("#", "")
+        mqtt_path = self.__createMQTTPath(mac, service, type, d2dConstants.COMMAND_LEVEL, command)
 
         try:
             self.__client.subscribe(mqtt_path)
