@@ -40,6 +40,7 @@ class mcast():
     def __init__(self, ip, port):
         self.__ip = ip
         self.__port = port
+        self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.__sock.bind((ip, port))
@@ -56,7 +57,7 @@ class mcast():
     def read(self, timeout=-1):
 
         current_epoch_time = int(time.time())
-        while True:
+        while self.__open:
             try:
                 data, (ip, port) = self.__sock.recvfrom(4096)
                 return data, ip, port
@@ -68,12 +69,15 @@ class mcast():
             except:
                 return None, None, None
 
+        return None, None, None
+
 
     def send(self, msg):
         self.__sock.sendto(msg, (self.__ip, self.__port))
 
 
     def close(self):
+        self.__open = False
         self.__sock.close()
 
 

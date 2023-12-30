@@ -54,20 +54,20 @@ class Test1_d2dBrokerDiscover(unittest.TestCase):
         self.assertTrue(len(ip.split(".")) == 4)
 
 
-class Test2_d2dUnitTest(unittest.TestCase):
+class Test2_d2dcn(unittest.TestCase):
 
     def setUp(self):
         self.mqtt_broker = mqttBroker()
 
 
-    def test3_d2dcnInfoAsignation(self):
+    def test1_d2dcnProperties(self):
 
         test1= d2dcn.d2d()
         self.assertTrue(test1.mac != "")
         self.assertTrue(test1.service != "")
 
 
-    def test4_RegisteredCommand(self):
+    def test2_RegisteredCommand(self):
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()
