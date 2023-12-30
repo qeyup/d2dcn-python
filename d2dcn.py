@@ -166,6 +166,10 @@ class d2d():
         self.__service = process_name.split(".")[0]
 
         self.__client = None
+
+        self.__callback_mutex = threading.RLock()
+        self.__command_update_callback = None
+        self.__info_update_callback = None
         self.__registered_commands = {}
 
 
@@ -177,6 +181,27 @@ class d2d():
     @property
     def mac(self):
         return self.__mac
+
+
+    @property
+    def onCommandUpdate(self):
+        return self.__command_update_callback
+
+
+    @onCommandUpdate.setter
+    def onCommandUpdate(self, callback):
+        with self.__callback_mutex:
+            self.__command_update_callback = callback
+
+    @property
+    def onInfoUpdate(self):
+        return self.__info_update_callback
+
+
+    @onInfoUpdate.setter
+    def onInfoUpdate(self, callback):
+        with self.__callback_mutex:
+            self.__info_update_callback = callback
 
 
     def __brokerDisconnected(self):
@@ -201,6 +226,8 @@ class d2d():
         type = topic_split[4]
         name = topic_split[5]
 
+        if prefix != d2dConstants.MQTT_PREFIX:
+            return
 
         if mode == d2dConstants.COMMAND_LEVEL:
 
@@ -216,7 +243,9 @@ class d2d():
             command_object = d2dCommand(mac, service, type, name, protocol, ip, port, params, response)
             self.__registered_commands[message.topic] = command_object
 
-        return
+            with self.__callback_mutex:
+                if self.__command_update_callback:
+                    self.__command_update_callback(mac, service, type, name)
 
 
     def __checkBrokerConnection(self):
@@ -343,11 +372,11 @@ class d2d():
         return commands
 
 
-    def subscribeInfo(self, mac:str="", service:str="", type="", name:str="", updateCallback=None) -> bool:
+    def subscribeInfo(self, mac:str="", service:str="", type="", name:str="") -> bool:
         return False
 
 
-    def getSubscribedValues(self) -> dict:
+    def getSubscribedVInfo(self, mac:str="", service:str="", type="", name:str="") -> dict:
         return {}
 
 

@@ -7,7 +7,12 @@ import time
 import os
 import signal
 import subprocess
- 
+import threading
+
+
+class container():
+    pass
+
 
 class mqttBroker(unittest.TestCase):
 
@@ -74,6 +79,16 @@ class Test2_d2dcn(unittest.TestCase):
 
 
         # Subcribe commands
+        tmp_container = container()
+        tmp_container.wait = threading.Lock()
+        tmp_container.wait.acquire()
+        def checkUpdate(mac, service, type, name):
+            tmp_container.mac = mac
+            tmp_container.service = service
+            tmp_container.type = type
+            tmp_container.name = name
+            tmp_container.wait.release()
+        test2.onCommandUpdate = checkUpdate
         self.assertTrue(test2.subscribeComands())
 
 
@@ -84,8 +99,12 @@ class Test2_d2dcn(unittest.TestCase):
         self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
 
 
-        # Wait command update
-        time.sleep(2)
+        # Wait command update and check
+        self.assertTrue(tmp_container.wait.acquire(timeout=2))
+        self.assertTrue(tmp_container.mac == test1.mac)
+        self.assertTrue(tmp_container.service == test1.service)
+        self.assertTrue(tmp_container.type == command_type)
+        self.assertTrue(tmp_container.name == command_name)
 
 
         # Check registered command
