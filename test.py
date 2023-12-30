@@ -25,7 +25,7 @@ class mqttBroker(unittest.TestCase):
 
     def __del__(self):
         self.pro.send_signal( signal.SIGTERM)
-        #pro.send_signal(signal.SIGINT)
+        #self.pro.send_signal(signal.SIGINT)
         self.pro.wait()
 
 
@@ -73,13 +73,19 @@ class Test2_d2dUnitTest(unittest.TestCase):
         test2 = d2dcn.d2d()
 
 
+        # Subcribe commands
+        self.assertTrue(test2.subscribeComands())
+
+
         # Register command
         api_result = {"arg1":"int", "arg2":"string"}
         command_type = "test"
         command_name = "command"
-        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type), "Check if broker is active")
+        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
 
-        return
+
+        # Wait command update
+        time.sleep(2)
 
 
         # Check registered command
@@ -96,8 +102,9 @@ class Test2_d2dUnitTest(unittest.TestCase):
         self.assertTrue(test_command.mac == test1.mac)
         self.assertTrue(test_command.name == command_name)
         self.assertTrue(test_command.service == test1.service)
-        self.assertTrue(test_command.api == api_result)
-        self.assertTrue(test_command.result == api_result)
+        self.assertTrue(test_command.params == api_result)
+        self.assertTrue(test_command.response == api_result)
+        return
 
 
         # Test command call
