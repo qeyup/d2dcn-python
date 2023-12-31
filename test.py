@@ -98,11 +98,8 @@ class Test2_d2dcn(unittest.TestCase):
         tmp_container = container()
         tmp_container.wait = threading.Lock()
         tmp_container.wait.acquire()
-        def checkUpdate(mac, service, type, name):
-            tmp_container.mac = mac
-            tmp_container.service = service
-            tmp_container.type = type
-            tmp_container.name = name
+        def checkUpdate(command):
+            tmp_container.command = command
             tmp_container.wait.release()
         test2.onCommandUpdate = checkUpdate
         self.assertTrue(test2.subscribeComands())
@@ -117,10 +114,10 @@ class Test2_d2dcn(unittest.TestCase):
 
         # Wait command update and check
         self.assertTrue(tmp_container.wait.acquire(timeout=2))
-        self.assertTrue(tmp_container.mac == test1.mac)
-        self.assertTrue(tmp_container.service == test1.service)
-        self.assertTrue(tmp_container.type == command_type)
-        self.assertTrue(tmp_container.name == command_name)
+        self.assertTrue(tmp_container.command.mac == test1.mac)
+        self.assertTrue(tmp_container.command.service == test1.service)
+        self.assertTrue(tmp_container.command.type == command_type)
+        self.assertTrue(tmp_container.command.name == command_name)
 
 
         # Check registered command
@@ -147,19 +144,71 @@ class Test2_d2dcn(unittest.TestCase):
         self.assertTrue(result == api_result)
 
 
-    def dis_test_Info1(self):
+    def test3_publishGetInfo(self):
 
         test1= d2dcn.d2d()
         test2 = d2dcn.d2d()
 
-        # Publish value
+        # Subcribe info
+        tmp_container = container()
+        tmp_container.wait = threading.Lock()
+        tmp_container.wait.acquire()
+        def checkUpdate(info):
+            tmp_container.info = info
+            tmp_container.wait.release()
+        test2.onInfoUpdate= checkUpdate
+        self.assertTrue(test2.subscribeInfo())
+
+        # Publish int value
         info_name = "test"
         info_value = 2
-        self.assertTrue(test1.publishInfo(self, info_name, info_value))
+        info_type = "test"
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
 
 
-        # Subscribe all
-        self.assertTrue(test2.subscribeInfo())
+        # Wait command update and check
+        self.assertTrue(tmp_container.wait.acquire(timeout=2))
+        self.assertTrue(tmp_container.info.mac == test1.mac)
+        self.assertTrue(tmp_container.info.service == test1.service)
+        self.assertTrue(tmp_container.info.type == info_type)
+        self.assertTrue(tmp_container.info.name == info_name)
+        self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.INT)
+        self.assertTrue(tmp_container.info.epoch != 0)
+
+
+        # Publish float value
+        info_value = 2.3
+        last_epoch = tmp_container.info.epoch
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+
+
+        # Wait command update and check
+        self.assertTrue(tmp_container.wait.acquire(timeout=2))
+        self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.FLOAT)
+        self.assertTrue(tmp_container.info.epoch >= last_epoch)
+
+
+        # Publish string value
+        info_value = "abcdefg"
+        last_epoch = tmp_container.info.epoch
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+
+
+        # Wait command update and check
+        self.assertTrue(tmp_container.wait.acquire(timeout=2))
+        self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.STRING)
+        self.assertTrue(tmp_container.info.epoch >= last_epoch)
+
+
+        # Check registered command
+        subscribed_info = test2.getSubscribedInfo()
+        self.assertTrue(len(subscribed_info) >= 1)
+
+        subscribed_info = test2.getSubscribedInfo(mac=test1.mac, service=test1.service, type=info_type, name=info_name)
+        self.assertTrue(len(subscribed_info) == 1)
 
 
 if __name__ == '__main__':

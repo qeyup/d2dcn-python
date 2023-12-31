@@ -50,6 +50,16 @@ class d2dConstants():
     class commandProtocol():
         JSON_UDP = "json-udp"
 
+    class infoField():
+        VALUE = "value"
+        TYPE = "type"
+        EPOCH = "epoch"
+
+    class valueTypes():
+        INT = "int"
+        STRING = "string"
+        FLOAT = "float"
+
 
 class mcast():
 
@@ -172,6 +182,46 @@ class d2dCommand():
         return False
 
 
+class d2dInfo():
+
+    def __init__(self,mac, service, type, name, value, valueType, epoch):
+        self.__name = name
+        self.__mac = mac
+        self.__service = service
+        self.__type = type
+        self.__value = value
+        self.__epoch = epoch
+        self.__valueType = valueType
+
+    @property
+    def name(self):
+        return self.__name
+
+    @property
+    def mac(self):
+        return self.__mac
+
+    @property
+    def service(self):
+        return self.__service
+
+    @property
+    def type(self):
+        return self.__type
+
+    @property
+    def value(self):
+        return self.__value
+
+    @property
+    def valueType(self):
+        return self.__valueType
+
+    @property
+    def epoch(self):
+        return self.__epoch
+
+
 class d2d():
 
     def __init__(self):
@@ -184,9 +234,11 @@ class d2d():
         self.__client = None
 
         self.__callback_mutex = threading.RLock()
+        self.__registered_mutex = threading.RLock()
         self.__command_update_callback = None
         self.__info_update_callback = None
         self.__registered_commands = {}
+        self.__registered_info = {}
 
 
     @property
@@ -218,10 +270,6 @@ class d2d():
     def onInfoUpdate(self, callback):
         with self.__callback_mutex:
             self.__info_update_callback = callback
-
-
-    def __brokerDisconnected(self):
-        self.__client = None
 
 
     def __brokerMessaheReceived(self, message):
@@ -257,17 +305,35 @@ class d2d():
                 return
 
             command_object = d2dCommand(mac, service, type, name, protocol, ip, port, params, response)
-            self.__registered_commands[message.topic] = command_object
+            with self.__registered_mutex:
+                self.__registered_commands[message.topic] = command_object
 
             with self.__callback_mutex:
                 if self.__command_update_callback:
-                    self.__command_update_callback(mac, service, type, name)
+                    self.__command_update_callback(command_object)
+
+        elif mode == d2dConstants.INFO_LEVEL:
+            try:
+                value = command_info[d2dConstants.infoField.VALUE]
+                valtype = command_info[d2dConstants.infoField.TYPE]
+                epoch = command_info[d2dConstants.infoField.EPOCH]
+            except:
+                return
+
+            info_object = d2dInfo(mac, service, type, name, value, valtype, epoch)
+            with self.__registered_mutex:
+                self.__registered_info[message.topic] = info_object
+
+            with self.__callback_mutex:
+                if self.__info_update_callback:
+                    self.__info_update_callback(info_object)
 
 
-    def __checkBrokerConnection(self):
+    def __checkBrokerConnection(self) -> bool:
 
         if self.__client:
-            return True
+            return self.__client.is_connected()
+
 
         broker_ip = self.getBrokerIP()
         if not broker_ip:
@@ -281,16 +347,15 @@ class d2d():
             return False
 
         client.on_message = lambda client, userdata, message : self.__brokerMessaheReceived(message)
-        client.on_disconnect = lambda client, userdata, rc : self.__brokerDisconnected()
         client.loop_start()
 
         self.__client = client
         return True
 
 
-    def __createMQTTPath(self, mac, service, type, mode, name):
+    def __createMQTTPath(self, mac, service, type, mode, name) -> str:
 
-        if mode not in [d2dConstants.COMMAND_LEVEL]:
+        if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
             return ""
 
         mqtt_path = d2dConstants.MQTT_PREFIX + "/"
@@ -322,12 +387,24 @@ class d2d():
         return mqtt_path
 
 
-    def getBrokerIP(self) -> str:
+    def __getType(self, data) -> str:
+
+        if isinstance(data, float):
+            return d2dConstants.valueTypes.FLOAT
+        elif isinstance(data, int):
+            return d2dConstants.valueTypes.INT
+        elif isinstance(data, str):
+            return d2dConstants.valueTypes.STRING
+        else:
+            return ""
+
+
+    def getBrokerIP(self, timeout=5) -> str:
         mcast_send_request = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_SERVER_PORT)
         mcast_listen_respond = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_CLIENT_PORT)
 
         mcast_send_request.send(d2dConstants.DISCOVER_MSG_REQUEST)
-        response, ip, port = mcast_listen_respond.read(5)
+        response, ip, port = mcast_listen_respond.read(timeout)
         if response == d2dConstants.DISCOVER_MSG_RESPONSE:
             return ip
         else:
@@ -351,11 +428,7 @@ class d2d():
         mqtt_msg[d2dConstants.commandField.PARAMS] = params
         mqtt_msg[d2dConstants.commandField.RESPONSE] = response
 
-
         self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg), qos=0, retain=True)
-
-        #self.__command_map[mqtt_path] = cmdCallback
-
 
         return True
 
@@ -381,20 +454,58 @@ class d2d():
         mqtt_pattern_path = mqtt_pattern_path.replace("+", ".*")
 
         commands = []
-        for mqtt_path in self.__registered_commands:
-            if re.search(mqtt_pattern_path, mqtt_path):
-                commands.append(self.__registered_commands[mqtt_path])
+        with self.__registered_mutex:
+            for mqtt_path in self.__registered_commands:
+                if re.search(mqtt_pattern_path, mqtt_path):
+                    commands.append(self.__registered_commands[mqtt_path])
 
         return commands
 
 
     def subscribeInfo(self, mac:str="", service:str="", type="", name:str="") -> bool:
-        return False
+        if not self.__checkBrokerConnection():
+            return False
+
+        mqtt_path = self.__createMQTTPath(mac, service, type, d2dConstants.INFO_LEVEL, name)
+
+        try:
+            self.__client.subscribe(mqtt_path)
+        except:
+            return False
+
+        return True
 
 
-    def getSubscribedVInfo(self, mac:str="", service:str="", type="", name:str="") -> dict:
-        return {}
+    def getSubscribedInfo(self, mac:str="", service:str="", type="", name:str="") -> dict:
+        mqtt_pattern_path = self.__createMQTTPath(mac, service, type, d2dConstants.INFO_LEVEL, name)
+        mqtt_pattern_path = mqtt_pattern_path.replace("+", ".*")
+
+        info = []
+        with self.__registered_mutex:
+            for mqtt_path in self.__registered_info:
+                if re.search(mqtt_pattern_path, mqtt_path):
+                    info.append(self.__registered_info[mqtt_path])
+
+        return info
 
 
-    def publishInfo(self, name:str, value:str) -> bool:
-        return False
+    def publishInfo(self, name:str, value:str, type:str) -> bool:
+        if not self.__checkBrokerConnection():
+            return False
+
+        if type == "":
+            type = d2dConstants.GENERIC_TYPE
+
+        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, type, d2dConstants.INFO_LEVEL, name)
+
+        value_type = self.__getType(value)
+        if value_type == "":
+            return False
+
+        mqtt_msg = {}
+        mqtt_msg[d2dConstants.infoField.VALUE] = value
+        mqtt_msg[d2dConstants.infoField.TYPE] = value_type
+        mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
+        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg), qos=0, retain=True)
+
+        return True
