@@ -90,7 +90,7 @@ class Test2_d2dcn(unittest.TestCase):
 
     def test2_RegisteredCommand(self):
 
-        test1= d2dcn.d2d()
+        test1 = d2dcn.d2d()
         test2 = d2dcn.d2d()
 
 
