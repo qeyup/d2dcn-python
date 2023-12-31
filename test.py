@@ -136,7 +136,6 @@ class Test2_d2dcn(unittest.TestCase):
         self.assertTrue(test_command.service == test1.service)
         self.assertTrue(test_command.params == api_result)
         self.assertTrue(test_command.response == api_result)
-        return
 
 
         # Test command call

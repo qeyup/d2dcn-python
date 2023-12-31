@@ -40,6 +40,11 @@ class d2dConstants():
     INFO_LEVEL = "info"
     GENERIC_TYPE = "generic"
 
+
+    class commandErrorMsg:
+        BAD_INPUT = "invalid input"
+        CALLBACK_ERROR = "command error"
+
     class commandField():
         PROTOCOL = "protocol"
         IP = "ip"
@@ -96,8 +101,10 @@ class udpRandomPortListener():
         return None, None, None
 
 
-    def send(self, msg):
-        self.__sock.sendto(msg, (self.__ip, self.__port))
+    def send(self, ip, port, msg):
+        if isinstance(msg, str):
+            msg = msg.encode()
+        self.__sock.sendto(msg, (ip, port))
 
 
     @property
@@ -114,6 +121,70 @@ class udpRandomPortListener():
     def close(self):
         self.__open = False
         self.__sock.close()
+
+
+class udpClient():
+    def __init__(self, ip, port):
+        self.__open = True
+        self.__remote_ip = ip
+        self.__remote_port = port
+        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.__sock.settimeout(0.1)
+
+
+    def __del__(self):
+        self.close()
+
+
+    def read(self, timeout=-1):
+
+        current_epoch_time = int(time.time())
+        while self.__open:
+            try:
+                data = self.__sock.recv(4096)
+                return data
+
+            except socket.timeout:
+                if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
+                    return None
+
+            except:
+                return None
+
+        return None
+
+
+    def send(self, msg):
+        if isinstance(msg, str):
+            msg = msg.encode()
+        self.__sock.sendto(msg, (self.__remote_ip, self.__remote_port))
+
+
+    @property
+    def local_ip(self):
+        hostname = socket.gethostname()
+        return socket.gethostbyname(hostname)
+
+
+    @property
+    def local_port(self):
+        return self.__sock.getsockname()[1]
+
+
+    @property
+    def remote_ip(self):
+        return self.__remote_ip
+
+
+    @property
+    def remote_port(self):
+        return self.__remote_port
+
+
+    def close(self):
+        self.__open = False
+        self.__sock.close()
+
 
 
 class mcast():
@@ -154,6 +225,8 @@ class mcast():
 
 
     def send(self, msg):
+        if isinstance(msg, str):
+            msg = msg.encode()
         self.__sock.sendto(msg, (self.__ip, self.__port))
 
 
@@ -214,33 +287,50 @@ class d2dCommand():
         self.__type = type
         self.__params = params
         self.__response = response
+        self.__socket = udpClient(ip, port)
+        self.__protocol = protocol
+
 
     @property
     def name(self):
         return self.__name
 
+
     @property
     def mac(self):
         return self.__mac
+
 
     @property
     def service(self):
         return self.__service
 
+
     @property
     def type(self):
         return self.__type
+
 
     @property
     def params(self):
         return self.__params
 
+
     @property
     def response(self):
         return self.__response
 
-    def call(self, args:dict) -> dict:
-        return False
+
+    def call(self, args:dict, timeout=10) -> dict:
+
+        try:
+            self.__socket.send(json.dumps(args, indent=1))
+            response = self.__socket.read(timeout)
+            response_dict = json.loads(response)
+            return response_dict
+
+        except:
+            return None
 
 
 class d2dInfo():
@@ -473,13 +563,30 @@ class d2d():
             return ""
 
 
-    def __commandListenThead(socket, shared_container):
+    def __commandListenThead(socket, shared_container, command_callback):
         while shared_container.run:
             read, ip, port = socket.read()
             if not read:
                 break
 
-            print(ip, port, read)
+
+            # json -> map
+            try:
+                args = json.loads(read)
+            except:
+                socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
+                continue
+
+            # Check args
+            # TODO
+
+
+            # Call command
+            response_dict = command_callback(args)
+            if response_dict:
+                socket.send(ip, port, json.dumps(response_dict, indent=1))
+            else:
+                socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
 
 
     def getBrokerIP(self, timeout=5) -> str:
@@ -496,6 +603,9 @@ class d2d():
 
     def addServiceCommand(self, cmdCallback, name:str, params:dict, response:dict, type:str="")-> bool:
 
+        if not cmdCallback:
+            return False
+
         if not self.__checkBrokerConnection():
             return False
 
@@ -505,7 +615,7 @@ class d2d():
 
         listen_socket = udpRandomPortListener()
         self.__command_sockets.append(listen_socket)
-        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container])
+        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container, cmdCallback])
         thread.start()
         self.__threads.append(thread)
 
@@ -519,7 +629,7 @@ class d2d():
         mqtt_msg[d2dConstants.commandField.PARAMS] = params
         mqtt_msg[d2dConstants.commandField.RESPONSE] = response
 
-        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg), qos=0, retain=True)
+        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=0, retain=True)
 
         return True
 
@@ -597,6 +707,6 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg), qos=0, retain=True)
+        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=0, retain=True)
 
         return True
