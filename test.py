@@ -111,13 +111,13 @@ class Test2_d2dcn(unittest.TestCase):
         api_result["arg1"]["type"] = "int"
         api_result["arg2"] = {}
         api_result["arg2"]["type"] = "string"
-        api_result["arg2"]["optional"] = 1
+        api_result["arg2"]["optional"] = True
         api_result["arg3"] = {}
         api_result["arg3"]["type"] = "float"
-        api_result["arg3"]["optional"] = 1
+        api_result["arg3"]["optional"] = True
         api_result["arg4"] = {}
         api_result["arg4"]["type"] = "bool"
-        api_result["arg4"]["optional"] = 1
+        api_result["arg4"]["optional"] = True
         command_type = "test"
         command_name = "command"
         self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
@@ -179,7 +179,7 @@ class Test2_d2dcn(unittest.TestCase):
         params["arg1"] = "string"
         params["arg2"] = "string"
         result = test_command.call(params)
-        #self.assertTrue(result == None)
+        self.assertTrue(result == None)
 
 
     def test3_publishGetInfo(self):

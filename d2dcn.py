@@ -558,12 +558,16 @@ class d2d():
 
         if isinstance(data, float):
             return d2dConstants.valueTypes.FLOAT
+
         elif isinstance(data, bool):
             return d2dConstants.valueTypes.BOOL
+
         elif isinstance(data, int):
             return d2dConstants.valueTypes.INT
+
         elif isinstance(data, str):
             return d2dConstants.valueTypes.STRING
+
         else:
             return ""
 
@@ -573,18 +577,44 @@ class d2d():
         if d2dConstants.infoField.TYPE not in field:
             return False
 
+        elif not isinstance(field[d2dConstants.infoField.TYPE], str):
+            return False
+
+        elif d2dConstants.infoField.OPTIONAL in field and not isinstance(field[d2dConstants.infoField.OPTIONAL], bool):
+            return False
+
         return True
+
+
+    def __checkFieldType(field, field_type):
+        if field_type == d2dConstants.valueTypes.STRING:
+            return isinstance(field, str)
+
+        elif field_type == d2dConstants.valueTypes.BOOL:
+            return isinstance(field, bool)
+
+        elif field_type == d2dConstants.valueTypes.INT:
+            return isinstance(field, int)
+
+        elif field_type == d2dConstants.valueTypes.FLOAT:
+            return isinstance(field, float)
+
+        return False
 
 
     def __checkInOutField(data_dict, prototipe_dict) -> bool:
 
+        # Chect type and non-exists
         for field in data_dict:
             if field not in prototipe_dict:
                 return False
+            if not d2d.__checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.infoField.TYPE]):
+                return False
 
+        # Check optional
         for field in prototipe_dict:
             field_prototipe = prototipe_dict[field]
-            mandatory = d2dConstants.infoField.OPTIONAL not in field_prototipe or field_prototipe[d2dConstants.infoField.OPTIONAL] == 0
+            mandatory = d2dConstants.infoField.OPTIONAL not in field_prototipe or not field_prototipe[d2dConstants.infoField.OPTIONAL]
             if field not in data_dict and mandatory:
                 return False
 
@@ -621,7 +651,9 @@ class d2d():
                     socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_OUTPUT)
 
                 else:
-                    socket.send(ip, port, json.dumps(response_dict, indent=1))
+                    # map -> json
+                    response = json.dumps(response_dict, indent=1)
+                    socket.send(ip, port, response)
 
             else:
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
