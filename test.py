@@ -212,6 +212,7 @@ class Test2_d2dcn(unittest.TestCase):
         self.assertTrue(tmp_container.info.name == info_name)
         self.assertTrue(tmp_container.info.value == info_value)
         self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.INT)
+        self.assertTrue(isinstance(tmp_container.info.value, int))
         self.assertTrue(tmp_container.info.epoch != 0)
 
 
@@ -224,7 +225,22 @@ class Test2_d2dcn(unittest.TestCase):
         # Wait command update and check
         self.assertTrue(tmp_container.wait.acquire(timeout=2))
         self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(isinstance(tmp_container.info.value, float))
         self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.FLOAT)
+        self.assertTrue(tmp_container.info.epoch >= last_epoch)
+
+
+        # Publish bool value
+        info_value = True
+        last_epoch = tmp_container.info.epoch
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+
+
+        # Wait command update and check
+        self.assertTrue(tmp_container.wait.acquire(timeout=2))
+        self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(isinstance(tmp_container.info.value, bool))
+        self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.BOOL)
         self.assertTrue(tmp_container.info.epoch >= last_epoch)
 
 
@@ -237,6 +253,7 @@ class Test2_d2dcn(unittest.TestCase):
         # Wait command update and check
         self.assertTrue(tmp_container.wait.acquire(timeout=2))
         self.assertTrue(tmp_container.info.value == info_value)
+        self.assertTrue(isinstance(tmp_container.info.value, str))
         self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.STRING)
         self.assertTrue(tmp_container.info.epoch >= last_epoch)
 
