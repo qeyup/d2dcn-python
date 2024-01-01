@@ -43,14 +43,15 @@ class d2dConstants():
 
     class commandErrorMsg:
         BAD_INPUT = "invalid input"
+        BAD_OUTPUT = "invalid output"
         CALLBACK_ERROR = "command error"
 
     class commandField():
         PROTOCOL = "protocol"
         IP = "ip"
         PORT = "port"
-        PARAMS = "params"
-        RESPONSE = "response"
+        INPUT = "input"
+        OUTPUT = "output"
 
     class commandProtocol():
         JSON_UDP = "json-udp"
@@ -59,8 +60,10 @@ class d2dConstants():
         VALUE = "value"
         TYPE = "type"
         EPOCH = "epoch"
+        OPTIONAL = "optional"
 
     class valueTypes():
+        BOOL = "bool"
         INT = "int"
         STRING = "string"
         FLOAT = "float"
@@ -462,8 +465,8 @@ class d2d():
                 protocol = command_info[d2dConstants.commandField.PROTOCOL]
                 ip = command_info[d2dConstants.commandField.IP]
                 port = command_info[d2dConstants.commandField.PORT]
-                params = command_info[d2dConstants.commandField.PARAMS]
-                response = command_info[d2dConstants.commandField.RESPONSE]
+                params = command_info[d2dConstants.commandField.INPUT]
+                response = command_info[d2dConstants.commandField.OUTPUT]
             except:
                 return
 
@@ -555,6 +558,8 @@ class d2d():
 
         if isinstance(data, float):
             return d2dConstants.valueTypes.FLOAT
+        elif isinstance(data, bool):
+            return d2dConstants.valueTypes.BOOL
         elif isinstance(data, int):
             return d2dConstants.valueTypes.INT
         elif isinstance(data, str):
@@ -563,7 +568,30 @@ class d2d():
             return ""
 
 
-    def __commandListenThead(socket, shared_container, command_callback):
+    def __checkInOutDefinedField(field) -> bool:
+
+        if d2dConstants.infoField.TYPE not in field:
+            return False
+
+        return True
+
+
+    def __checkInOutField(data_dict, prototipe_dict) -> bool:
+
+        for field in data_dict:
+            if field not in prototipe_dict:
+                return False
+
+        for field in prototipe_dict:
+            field_prototipe = prototipe_dict[field]
+            mandatory = d2dConstants.infoField.OPTIONAL not in field_prototipe or field_prototipe[d2dConstants.infoField.OPTIONAL] == 0
+            if field not in data_dict and mandatory:
+                return False
+
+        return True
+
+
+    def __commandListenThead(socket, shared_container, command_callback, input_params, output_params):
         while shared_container.run:
             read, ip, port = socket.read()
             if not read:
@@ -577,16 +605,27 @@ class d2d():
                 socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
                 continue
 
+
             # Check args
-            # TODO
+            if not d2d.__checkInOutField(args, input_params):
+                socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
+                continue
 
 
             # Call command
             response_dict = command_callback(args)
             if response_dict:
-                socket.send(ip, port, json.dumps(response_dict, indent=1))
+
+                # Check args
+                if not d2d.__checkInOutField(response_dict, output_params):
+                    socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_OUTPUT)
+
+                else:
+                    socket.send(ip, port, json.dumps(response_dict, indent=1))
+
             else:
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
+
 
 
     def getBrokerIP(self, timeout=5) -> str:
@@ -601,10 +640,18 @@ class d2d():
             return None
 
 
-    def addServiceCommand(self, cmdCallback, name:str, params:dict, response:dict, type:str="")-> bool:
+    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, type:str="")-> bool:
 
         if not cmdCallback:
             return False
+
+        for field in input_params:
+            if not d2d.__checkInOutDefinedField(input_params[field]):
+                return False
+
+        for field in output_params:
+            if not d2d.__checkInOutDefinedField(input_params[field]):
+                return False
 
         if not self.__checkBrokerConnection():
             return False
@@ -612,10 +659,9 @@ class d2d():
         if type == "":
             type = d2dConstants.GENERIC_TYPE
 
-
         listen_socket = udpRandomPortListener()
         self.__command_sockets.append(listen_socket)
-        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container, cmdCallback])
+        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container, cmdCallback, input_params, output_params])
         thread.start()
         self.__threads.append(thread)
 
@@ -626,8 +672,8 @@ class d2d():
         mqtt_msg[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
         mqtt_msg[d2dConstants.commandField.IP] = listen_socket.ip
         mqtt_msg[d2dConstants.commandField.PORT] = listen_socket.port
-        mqtt_msg[d2dConstants.commandField.PARAMS] = params
-        mqtt_msg[d2dConstants.commandField.RESPONSE] = response
+        mqtt_msg[d2dConstants.commandField.INPUT] = input_params
+        mqtt_msg[d2dConstants.commandField.OUTPUT] = output_params
 
         self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=0, retain=True)
 

@@ -106,7 +106,18 @@ class Test2_d2dcn(unittest.TestCase):
 
 
         # Register command
-        api_result = {"arg1":"int", "arg2":"string"}
+        api_result = {}
+        api_result["arg1"] = {}
+        api_result["arg1"]["type"] = "int"
+        api_result["arg2"] = {}
+        api_result["arg2"]["type"] = "string"
+        api_result["arg2"]["optional"] = 1
+        api_result["arg3"] = {}
+        api_result["arg3"]["type"] = "float"
+        api_result["arg3"]["optional"] = 1
+        api_result["arg4"] = {}
+        api_result["arg4"]["type"] = "bool"
+        api_result["arg4"]["optional"] = 1
         command_type = "test"
         command_name = "command"
         self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
@@ -138,9 +149,37 @@ class Test2_d2dcn(unittest.TestCase):
         self.assertTrue(test_command.response == api_result)
 
 
-        # Test command call
-        result = test_command.call(api_result)
-        self.assertTrue(result == api_result)
+        # Test command call. Missing non optional arg
+        params = {}
+        params["arg2"] = "string"
+        result = test_command.call(params)
+        self.assertTrue(result == None)
+
+
+        # Test command call. Missing optional arg
+        params = {}
+        params["arg1"] = 1
+        params["arg3"] = 1.2
+        params["arg4"] = True
+        result = test_command.call(params)
+        self.assertTrue(result == params)
+
+
+        # Test command. Call success
+        params = {}
+        params["arg1"] = 0
+        params["arg2"] = "string"
+        params["arg4"] = False
+        result = test_command.call(params)
+        self.assertTrue(result == params)
+
+
+        # Test command. Invalid arg type
+        params = {}
+        params["arg1"] = "string"
+        params["arg2"] = "string"
+        result = test_command.call(params)
+        #self.assertTrue(result == None)
 
 
     def test3_publishGetInfo(self):

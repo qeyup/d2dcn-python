@@ -18,25 +18,25 @@
         "ip": **IP**,
         "port": **XXXX**,
         "api": "json/raw"
-        "parameter": {
+        "input": {
             "**FIELD_NAME_1**": {
                 "type": "**FIELD_TYPE**",
-                "optional": "yes/no"
+                "optional": true/false
             },
             "**FIELD_NAME_2**": {
                 "type": "**FIELD_TYPE**",
-                "optional": "yes/no"
+                "optional": true/false
             },
             ...
         },
-        "response": {
+        "output": {
             "**FIELD_NAME_1**": {
                 "type": "**FIELD_TYPE**",
-                "optional": "yes/no"
+                "optional": true/false
             },
             "**FIELD_NAME_2**": {
                 "type": "**FIELD_TYPE**",
-                "optional": "yes/no"
+                "optional": true/false
             },
             ...
         }
