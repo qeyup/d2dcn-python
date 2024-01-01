@@ -27,6 +27,9 @@ import re
 import paho.mqtt.client
 
 
+version = "0.1.0"
+
+
 class d2dConstants():
     MCAST_DISCOVER_GRP = '224.1.1.1'
     MCAST_DISCOVER_SERVER_PORT = 5005
