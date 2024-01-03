@@ -285,12 +285,15 @@ class d2dInfo():
 
 class d2d():
 
-    def __init__(self):
+    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1):
         self.__mac = hex(uuid.getnode()).replace("0x", "")
 
         process = psutil.Process(os.getpid())
         process_name = process.name()
         self.__service = process_name.split(".")[0]
+
+        self.__broker_discover_timeout = broker_discover_timeout
+        self.__broker_discover_retry = broker_discover_retry
 
         self.__client = None
         self.__threads = []
@@ -408,7 +411,8 @@ class d2d():
             return self.__client.is_connected()
 
         discover_client = ServiceDiscovery.client()
-        broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME, timeout=5, retry=-1)
+        broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME,
+            timeout=self.__broker_discover_timeout, retry=self.__broker_discover_retry)
         if not broker_ip:
             return False
 
