@@ -6,6 +6,7 @@ set -e
 PACKAGES=()
 PACKAGES+=(psutil)
 PACKAGES+=(paho-mqtt)
+PACKAGES+=(ServiceDiscovery)
 PACKAGES+=(wheel)
 PACKAGES+=(setuptools)
 PACKAGES+=(twine)

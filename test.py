@@ -16,14 +16,13 @@
 # along with this program. If not, see <http://www.gnu.org/licenses/>.
 #
 
-import sys
 import unittest
 import d2dcn
 import time
-import os
 import signal
 import subprocess
 import threading
+import ServiceDiscovery
 
 
 class container():
@@ -34,7 +33,7 @@ class mqttBroker(unittest.TestCase):
 
     def __init__(self):
         # Launch discover broker process
-        self.broker_discover = d2dcn.d2dBrokerDiscover()
+        self.broker_discover = ServiceDiscovery.daemon(d2dcn.d2dConstants.MQTT_SERVICE_NAME)
         self.broker_discover.run(True)
 
 
@@ -48,31 +47,6 @@ class mqttBroker(unittest.TestCase):
         self.pro.send_signal( signal.SIGTERM)
         #self.pro.send_signal(signal.SIGINT)
         self.pro.wait()
-
-
-class Test1_d2dBrokerDiscover(unittest.TestCase):
-
-    def test1_startStopBrokerDiscover(self):
-        broker_discover = d2dcn.d2dBrokerDiscover()
-        t1 = broker_discover.run(True)
-        time.sleep(2)
-        broker_discover.stop()
-        time.sleep(1)
-        self.assertFalse(t1.is_alive())
-
-
-    def test2_brokerDiscover(self):
-
-
-        broker_discover = d2dcn.d2dBrokerDiscover()
-        broker_discover.run(True)
-        time.sleep(2)
-
-
-        test1= d2dcn.d2d()
-        ip = test1.getBrokerIP()
-        self.assertTrue(ip != "")
-        self.assertTrue(len(ip.split(".")) == 4)
 
 
 class Test2_d2dcn(unittest.TestCase):

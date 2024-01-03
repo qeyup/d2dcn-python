@@ -17,7 +17,6 @@
 
 import os
 import socket
-import struct
 import threading
 import time
 import uuid
@@ -25,19 +24,15 @@ import psutil
 import json
 import re
 import paho.mqtt.client
+import ServiceDiscovery
 
 
 version = "0.1.0"
 
 
 class d2dConstants():
-    MCAST_DISCOVER_GRP = '224.1.1.1'
-    MCAST_DISCOVER_SERVER_PORT = 5005
-    MCAST_DISCOVER_CLIENT_PORT = 5006
+    MQTT_SERVICE_NAME = "MQTT_BROKER"
     MQTT_BROKER_PORT = 1883
-    MULTICAST_TTL = 2
-    DISCOVER_MSG_REQUEST = b"Who's broker?"
-    DISCOVER_MSG_RESPONSE = b"I'm broker"
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
@@ -154,7 +149,7 @@ class udpClient():
                 if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
                     return None
 
-            except:
+            except socket.error:
                 return None
 
         return None
@@ -190,98 +185,6 @@ class udpClient():
     def close(self):
         self.__open = False
         self.__sock.close()
-
-
-
-class mcast():
-
-    def __init__(self, ip, port):
-        self.__ip = ip
-        self.__port = port
-        self.__open = True
-        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.__sock.bind((ip, port))
-        self.__sock.settimeout(0.1)
-
-        mreq = struct.pack("4sl", socket.inet_aton(ip), socket.INADDR_ANY)
-        self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-
-
-    def __del__(self):
-        self.close()
-
-
-    def read(self, timeout=-1):
-
-        current_epoch_time = int(time.time())
-        while self.__open:
-            try:
-                data, (ip, port) = self.__sock.recvfrom(4096)
-                return data, ip, port
-
-            except socket.timeout:
-                if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
-                    return None, None, None
-
-            except:
-                return None, None, None
-
-        return None, None, None
-
-
-    def send(self, msg):
-        if isinstance(msg, str):
-            msg = msg.encode()
-        self.__sock.sendto(msg, (self.__ip, self.__port))
-
-
-    def close(self):
-        self.__open = False
-        self.__sock.close()
-
-
-class d2dBrokerDiscover():
-
-    def __init__(self):
-        self.__thread = None
-        self.__shared_container = container()
-        self.__shared_container.run = True
-        self.__shared_container.mcast_listen_request = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_SERVER_PORT)
-        self.__shared_container.mcast_send_respond = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_CLIENT_PORT)
-
-
-    def __del__(self):
-        self.stop()
-        if self.__thread:
-            self.__thread.join()
-
-
-    def __run(shared_container):
-
-        while shared_container.run:
-            read, ip, port = shared_container.mcast_listen_request.read()
-            if not read:
-                break
-
-            if read == d2dConstants.DISCOVER_MSG_REQUEST:
-                shared_container.mcast_send_respond.send(d2dConstants.DISCOVER_MSG_RESPONSE)
-
-
-    def run(self, thread=False):
-        if thread:
-            self.__thread  = threading.Thread(target=d2dBrokerDiscover.__run, daemon=True, args=[self.__shared_container])
-            self.__thread .start()
-            return self.__thread
-        else:
-            d2dBrokerDiscover.__run(self.__mcast)
-            return None
-
-
-    def stop(self):
-        self.__shared_container.run = False
-        self.__shared_container.mcast_listen_request.close()
-        self.__shared_container.mcast_send_respond.close()
 
 
 class d2dCommand():
@@ -503,8 +406,8 @@ class d2d():
         if self.__client:
             return self.__client.is_connected()
 
-
-        broker_ip = self.getBrokerIP()
+        discover_client = ServiceDiscovery.client()
+        broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME, timeout=5, retry=-1)
         if not broker_ip:
             return False
 
@@ -660,7 +563,6 @@ class d2d():
 
             else:
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
-
 
 
     def getBrokerIP(self, timeout=5) -> str:
