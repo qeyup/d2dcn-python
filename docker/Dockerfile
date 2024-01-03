@@ -3,7 +3,7 @@ FROM ubuntu:20.04
 
 ########################################
 # Docker image name
-#DB DOCKER_IMAGE_NAME=d2dcn_gui_dwi
+#DB DOCKER_IMAGE_NAME=d2dcn_dwi
 
 # Docker build defined args
 #DB DOCKER_BUILD_ARGS=
