@@ -1,6 +1,7 @@
 version: "3.3"
 services:
   build_env:
+    build: "."
     image: "d2dcn_dwi"
     volumes:
       - ../:/home/docker/workspace
