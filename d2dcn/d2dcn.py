@@ -36,8 +36,9 @@ class d2dConstants():
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
-    GENERIC_TYPE = "generic"
 
+    class types:
+        GENERIC = "generic"
 
     class commandErrorMsg:
         BAD_INPUT = "invalid input"
@@ -96,7 +97,7 @@ class udpRandomPortListener():
                 if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
                     return None, None, None
 
-            except:
+            except socket.error:
                 return None, None, None
 
         return None, None, None
@@ -565,18 +566,6 @@ class d2d():
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
 
 
-    def getBrokerIP(self, timeout=5) -> str:
-        mcast_send_request = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_SERVER_PORT)
-        mcast_listen_respond = mcast(d2dConstants.MCAST_DISCOVER_GRP, d2dConstants.MCAST_DISCOVER_CLIENT_PORT)
-
-        mcast_send_request.send(d2dConstants.DISCOVER_MSG_REQUEST)
-        response, ip, port = mcast_listen_respond.read(timeout)
-        if response == d2dConstants.DISCOVER_MSG_RESPONSE:
-            return ip
-        else:
-            return None
-
-
     def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, type:str="")-> bool:
 
         if not cmdCallback:
@@ -594,7 +583,7 @@ class d2d():
             return False
 
         if type == "":
-            type = d2dConstants.GENERIC_TYPE
+            type = d2dConstants.types.GENERIC
 
         listen_socket = udpRandomPortListener()
         self.__command_sockets.append(listen_socket)
@@ -678,7 +667,7 @@ class d2d():
             return False
 
         if type == "":
-            type = d2dConstants.GENERIC_TYPE
+            type = d2dConstants.types.GENERIC
 
         mqtt_path = self.__createMQTTPath(self.__mac, self.__service, type, d2dConstants.INFO_LEVEL, name)
 
