@@ -1,11 +1,11 @@
 version: "3.3"
 services:
   build_env:
-    build: "docker/."
-    container_name: "d2dcn_gui_dwc"
-    image: "d2dcn_gui_dwi"
+    build: "."
+    container_name: "d2dcn_dwc"
+    image: "d2dcn_dwi"
     volumes:
-      - .:/home/docker/workspace
+      - ../:/home/docker/workspace
       - /tmp/.X11-unix/:/tmp/.X11-unix/
     environment:
       - DISPLAY=:0

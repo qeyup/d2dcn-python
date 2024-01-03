@@ -35,6 +35,8 @@ PACKAGES+=(tzdata)
 
 PACKAGES+=(openssh-server)
 
+PACKAGES+=(mosquitto)
+
 
 # Set up locales
 DEBIAN_FRONTEND=noninteractive

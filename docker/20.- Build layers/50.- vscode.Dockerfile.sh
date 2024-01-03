@@ -33,6 +33,7 @@ su docker -c "code --install-extension sandcastle.vscode-open"
 su docker -c "code --install-extension twxs.cmake"
 su docker -c "code --install-extension zachflower.uncrustify"
 su docker -c "code --install-extension eamodio.gitlens"
+su docker -c "code --install-extension ms-python.python"
 
 
 # Condigure user settings
@@ -40,7 +41,8 @@ cat << 'EOF' > ${HOME_FOLDER}/.config/Code/User/settings.json
 {
     "extensions.ignoreRecommendations": true,
     "terminal.integrated.enableMultiLinePasteWarning": false,
-    "editor.renderWhitespace": "boundary"
+    "editor.renderWhitespace": "boundary",
+    "hediet.vscode-drawio.theme": "Kennedy"
 }
 EOF
 chown docker ${HOME_FOLDER}/.config/Code/User/settings.json
