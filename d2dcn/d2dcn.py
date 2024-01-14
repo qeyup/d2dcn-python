@@ -27,7 +27,7 @@ import paho.mqtt.client
 import ServiceDiscovery
 
 
-version = "0.1.0"
+version = "0.1.1"
 
 
 class d2dConstants():
@@ -408,7 +408,16 @@ class d2d():
     def __checkBrokerConnection(self) -> bool:
 
         if self.__client:
-            return self.__client.is_connected()
+            if self.__client.is_connected():
+                return True
+            else:
+                for interval in range(50):
+                    time.sleep(0.05)
+                    if self.__client.is_connected():
+                        return True
+
+                return self.__client.is_connected()
+
 
         discover_client = ServiceDiscovery.client()
         broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME,
@@ -605,9 +614,8 @@ class d2d():
         mqtt_msg[d2dConstants.commandField.INPUT] = input_params
         mqtt_msg[d2dConstants.commandField.OUTPUT] = output_params
 
-        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=0, retain=True)
-
-        return True
+        msg_info = self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
+        return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
     def subscribeComands(self, mac:str="", service:str="", type:str="", command:str="") -> bool:
@@ -683,6 +691,5 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=0, retain=True)
-
-        return True
+        msg_info = self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
+        return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
