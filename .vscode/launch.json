@@ -9,7 +9,19 @@
             "type": "python",
             "request": "launch",
             "program": "${workspaceFolder}/test.py",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": "${input:inPrompt}"
+        }
+    ],
+    "inputs": [
+        {
+            "id": "inPrompt",
+            "type": "command",
+            "command": "memento.promptString",
+            "args": {
+                "id": "inPrompt"
+            }
         }
     ]
 }
