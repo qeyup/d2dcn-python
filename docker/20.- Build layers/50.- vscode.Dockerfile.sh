@@ -34,6 +34,7 @@ su docker -c "code --install-extension twxs.cmake"
 su docker -c "code --install-extension zachflower.uncrustify"
 su docker -c "code --install-extension eamodio.gitlens"
 su docker -c "code --install-extension ms-python.python"
+su docker -c "code --install-extension spadin.memento-inputs"
 
 
 # Condigure user settings
