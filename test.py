@@ -92,16 +92,16 @@ class Test2_d2dcn(unittest.TestCase):
         api_result["arg4"] = {}
         api_result["arg4"]["type"] = "bool"
         api_result["arg4"]["optional"] = True
-        command_type = "test"
+        command_category = "test"
         command_name = "command"
-        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_type))
+        self.assertTrue(test1.addServiceCommand(lambda args : args, command_name, api_result, api_result, command_category))
 
 
         # Wait command update and check
         self.assertTrue(tmp_container.wait.acquire(timeout=2))
         self.assertTrue(tmp_container.command.mac == test1.mac)
         self.assertTrue(tmp_container.command.service == test1.service)
-        self.assertTrue(tmp_container.command.type == command_type)
+        self.assertTrue(tmp_container.command.category == command_category)
         self.assertTrue(tmp_container.command.name == command_name)
 
 
@@ -109,7 +109,7 @@ class Test2_d2dcn(unittest.TestCase):
         availableCommands = test2.getAvailableComands()
         self.assertTrue(len(availableCommands) >= 1)
 
-        availableCommands = test2.getAvailableComands(mac=test1.mac, service=test1.service, type=command_type, command=command_name)
+        availableCommands = test2.getAvailableComands(mac=test1.mac, service=test1.service, category=command_category, command=command_name)
         self.assertTrue(len(availableCommands) == 1)
 
 
@@ -174,15 +174,15 @@ class Test2_d2dcn(unittest.TestCase):
         # Publish int value
         info_name = "test"
         info_value = 2
-        info_type = "test"
-        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+        info_category = "test"
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_category))
 
 
         # Wait command update and check
         self.assertTrue(tmp_container.wait.acquire(timeout=2))
         self.assertTrue(tmp_container.info.mac == test1.mac)
         self.assertTrue(tmp_container.info.service == test1.service)
-        self.assertTrue(tmp_container.info.type == info_type)
+        self.assertTrue(tmp_container.info.category == info_category)
         self.assertTrue(tmp_container.info.name == info_name)
         self.assertTrue(tmp_container.info.value == info_value)
         self.assertTrue(tmp_container.info.valueType == d2dcn.d2dConstants.valueTypes.INT)
@@ -193,7 +193,7 @@ class Test2_d2dcn(unittest.TestCase):
         # Publish float value
         info_value = 2.3
         last_epoch = tmp_container.info.epoch
-        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_category))
 
 
         # Wait command update and check
@@ -207,7 +207,7 @@ class Test2_d2dcn(unittest.TestCase):
         # Publish bool value
         info_value = True
         last_epoch = tmp_container.info.epoch
-        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_category))
 
 
         # Wait command update and check
@@ -221,7 +221,7 @@ class Test2_d2dcn(unittest.TestCase):
         # Publish string value
         info_value = "abcdefg"
         last_epoch = tmp_container.info.epoch
-        self.assertTrue(test1.publishInfo(info_name, info_value, info_type))
+        self.assertTrue(test1.publishInfo(info_name, info_value, info_category))
 
 
         # Wait command update and check
@@ -236,7 +236,7 @@ class Test2_d2dcn(unittest.TestCase):
         subscribed_info = test2.getSubscribedInfo()
         self.assertTrue(len(subscribed_info) >= 1)
 
-        subscribed_info = test2.getSubscribedInfo(mac=test1.mac, service=test1.service, type=info_type, name=info_name)
+        subscribed_info = test2.getSubscribedInfo(mac=test1.mac, service=test1.service, category=info_category, name=info_name)
         self.assertTrue(len(subscribed_info) == 1)
 
 
