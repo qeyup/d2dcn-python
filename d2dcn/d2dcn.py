@@ -43,9 +43,10 @@ class d2dConstants():
         CONFIGURATION = "configuration"
 
     class commandErrorMsg:
-        BAD_INPUT = "invalid input"
-        BAD_OUTPUT = "invalid output"
-        CALLBACK_ERROR = "command error"
+        BAD_INPUT = "Invalid input"
+        BAD_OUTPUT = "Invalid output"
+        CALLBACK_ERROR = "Command error"
+        EXCEPTION_ERROR = "Exception raised"
 
     class commandField():
         PROTOCOL = "protocol"
@@ -237,12 +238,14 @@ class d2dCommand():
 
         try:
             self.__socket.send(json.dumps(args, indent=1))
-            response = self.__socket.read(timeout)
-            response_dict = json.loads(response)
-            return response_dict
+            response = self.__socket.read(timeout).decode()
+            return json.loads(response)
 
         except:
-            return None
+            if isinstance(response, str):
+                return response
+            else:
+                return d2dConstants.commandErrorMsg.EXCEPTION_ERROR
 
 
 class d2dInfo():
@@ -566,7 +569,7 @@ class d2d():
 
             # Call command
             response_dict = command_callback(args)
-            if response_dict:
+            if isinstance(response_dict, dict):
 
                 # Check args
                 if not d2d.__checkInOutField(response_dict, output_params):
@@ -591,7 +594,7 @@ class d2d():
                 return False
 
         for field in output_params:
-            if not d2d.__checkInOutDefinedField(input_params[field]):
+            if not d2d.__checkInOutDefinedField(output_params[field]):
                 return False
 
         if not self.__checkBrokerConnection():
