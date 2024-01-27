@@ -317,9 +317,7 @@ class d2d():
         self.__client = None
         self.__threads = []
         self.__command_sockets = []
-        self.__serviceCommands = {}
-        self.__serviceCommandsPath = {}
-        self.__serviceCommandEnable = {}
+        self.__service_container = {}
         self.__shared_container = container()
         self.__shared_container.run = True
         self.__shared_container.callback_mutex = threading.RLock()
@@ -564,7 +562,7 @@ class d2d():
         return True
 
 
-    def __commandListenThead(socket, shared_container, command_callback, input_params, output_params):
+    def __commandListenThead(socket, shared_container, service_container, command_callback, input_params, output_params):
         while shared_container.run:
             read, ip, port = socket.read()
             if not read:
@@ -576,6 +574,12 @@ class d2d():
                 args = json.loads(read)
             except:
                 socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
+                continue
+
+
+            # Ignore if disable
+            if not service_container.map[d2dConstants.commandField.ENABLE]:
+                socket.send(ip, port, d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR)
                 continue
 
 
@@ -622,33 +626,35 @@ class d2d():
             category = d2dConstants.category.GENERIC
 
 
+        self.__service_container[name] = container()
+
         listen_socket = udpRandomPortListener()
         self.__command_sockets.append(listen_socket)
-        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container, cmdCallback, input_params, output_params])
+        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__shared_container, self.__service_container[name], cmdCallback, input_params, output_params])
         thread.start()
         self.__threads.append(thread)
 
 
-        self.__serviceCommandsPath[name] = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
+        self.__service_container[name].path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
 
-        self.__serviceCommands[name] = {}
-        self.__serviceCommands[name][d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
-        self.__serviceCommands[name][d2dConstants.commandField.IP] = listen_socket.ip
-        self.__serviceCommands[name][d2dConstants.commandField.PORT] = listen_socket.port
-        self.__serviceCommands[name][d2dConstants.commandField.INPUT] = input_params
-        self.__serviceCommands[name][d2dConstants.commandField.OUTPUT] = output_params
-        self.__serviceCommands[name][d2dConstants.commandField.ENABLE] = enable
+        self.__service_container[name].map = {}
+        self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
+        self.__service_container[name].map[d2dConstants.commandField.IP] = listen_socket.ip
+        self.__service_container[name].map[d2dConstants.commandField.PORT] = listen_socket.port
+        self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
+        self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
+        self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
 
-        msg_info = self.__client.publish(self.__serviceCommandsPath[name], payload=json.dumps(self.__serviceCommands[name], indent=1), qos=1, retain=True)
+        msg_info = self.__client.publish(self.__service_container[name].path, payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
     def enableCommand(self, name, enable):
-        if name not in self.__serviceCommands:
+        if name not in self.__service_container:
             return False
 
-        self.__serviceCommands[name][d2dConstants.commandField.ENABLE] = enable
-        msg_info = self.__client.publish(self.__serviceCommandsPath[name], payload=json.dumps(self.__serviceCommands[name], indent=1), qos=1, retain=True)
+        self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
+        msg_info = self.__client.publish(self.__service_container[name].path, payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
