@@ -327,6 +327,7 @@ class d2d():
         self.__shared_container.command_update_callback = None
         self.__shared_container.info_update_callback = None
         self.__shared_container.registered_commands = {}
+        self.__shared_container.subscribe_patterns = []
         self.__shared_container.registered_info = {}
 
 
@@ -375,6 +376,15 @@ class d2d():
         try:
             command_info = json.loads(message.payload)
         except:
+            return
+
+        ok = False
+        for subscriber in shared_container.subscribe_patterns:
+
+            if re.search(subscriber, message.topic):
+                ok = True
+                break
+        if not ok:
             return
 
         topic_split = message.topic.split("/")
@@ -463,6 +473,10 @@ class d2d():
         return True
 
 
+    def __checkIfRegEx(string):
+        return ".*" in string or "(" in string or "[" in string or ")" in string or "]" in string or "|" in string
+
+
     def __createMQTTPath(self, mac, service, category, mode, name) -> str:
 
         if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
@@ -470,24 +484,25 @@ class d2d():
 
         mqtt_path = d2dConstants.MQTT_PREFIX + "/"
 
-        if mac != "":
+        if mac != "" and not d2d.__checkIfRegEx(mac):
+
             mqtt_path += mac + "/"
         else:
             mqtt_path += "+/"
 
-        if service != "":
+        if service != "" and not d2d.__checkIfRegEx(service):
             mqtt_path += service + "/"
         else:
             mqtt_path += "+/"
 
         mqtt_path += mode + "/"
 
-        if category != "":
+        if category != "" and not d2d.__checkIfRegEx(category):
             mqtt_path += category + "/"
         else:
             mqtt_path += "+/"
 
-        if name != "":
+        if name != "" and not d2d.__checkIfRegEx(name):
             mqtt_path += name
         else:
             mqtt_path += "+"
@@ -495,6 +510,40 @@ class d2d():
         mqtt_path = mqtt_path.replace("#", "")
 
         return mqtt_path
+
+
+    def __createRegexPath(self, mac, service, category, mode, name) -> str:
+
+        if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
+            return ""
+
+        regex_path = d2dConstants.MQTT_PREFIX + "/"
+
+        if mac != "":
+            regex_path += mac + "/"
+        else:
+            regex_path += ".*/"
+
+        if service != "":
+            regex_path += service + "/"
+        else:
+            regex_path += ".*/"
+
+        regex_path += mode + "/"
+
+        if category != "":
+            regex_path += category + "/"
+        else:
+            regex_path += ".*/"
+
+        if name != "":
+            regex_path += name
+        else:
+            regex_path += ".*"
+
+        regex_path = regex_path.replace("#", "")
+
+        return regex_path
 
 
     def __getType(self, data) -> str:
@@ -666,19 +715,23 @@ class d2d():
             return False
 
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
+        regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
 
         try:
             self.__client.subscribe(mqtt_path)
         except:
             return False
 
+
+        if regex_path not in self.__shared_container.subscribe_patterns:
+            self.__shared_container.subscribe_patterns.append(regex_path)
+
         return True
 
 
     def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="") -> list:
 
-        mqtt_pattern_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
-        mqtt_pattern_path = mqtt_pattern_path.replace("+", ".*")
+        mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
 
         commands = []
         with self.__shared_container.registered_mutex:
@@ -694,18 +747,21 @@ class d2d():
             return False
 
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
+        regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
         try:
             self.__client.subscribe(mqtt_path)
         except:
             return False
 
+        if regex_path not in self.__shared_container.subscribe_patterns:
+            self.__shared_container.subscribe_patterns.append(regex_path)
+
         return True
 
 
     def getSubscribedInfo(self, mac:str="", service:str="", category="", name:str="") -> dict:
-        mqtt_pattern_path = self.__createMQTTPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
-        mqtt_pattern_path = mqtt_pattern_path.replace("+", ".*")
+        mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
         info = []
         with self.__shared_container.registered_mutex:
