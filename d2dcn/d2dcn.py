@@ -46,6 +46,7 @@ class d2dConstants():
         BAD_INPUT = "Invalid input"
         BAD_OUTPUT = "Invalid output"
         CALLBACK_ERROR = "Command error"
+        CONNECTION_ERROR = "Connection error"
         EXCEPTION_ERROR = "Exception raised"
         NOT_ENABLE_ERROR = "Command not enable"
 
@@ -251,6 +252,7 @@ class d2dCommand():
             return d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR
 
         try:
+            response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
             response = self.__socket.read(timeout).decode()
             return json.loads(response)
