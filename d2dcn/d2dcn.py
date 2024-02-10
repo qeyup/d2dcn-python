@@ -194,6 +194,34 @@ class udpClient():
         self.__sock.close()
 
 
+class d2dCommandResponse(dict):
+
+    def __init__(self, str_response):
+        super().__init__()
+
+        try:
+            response_dict = json.loads(str_response)
+            for item in response_dict:
+                self[item] = response_dict[item]
+            self.__success = True
+
+        except:
+            if isinstance(str_response, str):
+                self.__error = str_response
+            else:
+                self.__error = d2dConstants.commandErrorMsg.EXCEPTION_ERROR
+            self.__success = False
+
+    @property
+    def error(self):
+        return self.__error
+
+
+    @property
+    def success(self):
+        return self.__success
+
+
 class d2dCommand():
 
     def __init__(self,mac, service, category, name, protocol, ip, port, params, response, enable):
@@ -209,7 +237,6 @@ class d2dCommand():
             self.__socket = udpClient(ip, port)
         else:
             self.__socket = None
-
 
 
     @property
@@ -255,13 +282,11 @@ class d2dCommand():
             response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
             response = self.__socket.read(timeout).decode()
-            return json.loads(response)
 
         except:
-            if isinstance(response, str):
-                return response
-            else:
-                return d2dConstants.commandErrorMsg.EXCEPTION_ERROR
+            pass
+
+        return d2dCommandResponse(response) 
 
 
 class d2dInfo():

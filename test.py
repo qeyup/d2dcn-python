@@ -127,7 +127,7 @@ class Test2_d2dcn(unittest.TestCase):
         params = {}
         params["arg2"] = "string"
         result = test_command.call(params)
-        self.assertTrue(result == None)
+        self.assertFalse(result.success)
 
 
         # Test command call. Missing optional arg
@@ -153,7 +153,7 @@ class Test2_d2dcn(unittest.TestCase):
         params["arg1"] = "string"
         params["arg2"] = "string"
         result = test_command.call(params)
-        self.assertTrue(result == None)
+        self.assertFalse(result.success)
 
 
     def test3_publishGetInfo(self):
