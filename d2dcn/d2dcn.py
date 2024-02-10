@@ -341,11 +341,11 @@ class d2d():
         self.__broker_discover_timeout = broker_discover_timeout
         self.__broker_discover_retry = broker_discover_retry
 
-        self.__client = None
         self.__threads = []
         self.__command_sockets = []
         self.__service_container = {}
         self.__shared_container = container()
+        self.__shared_container.local_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/#"
         self.__shared_container.run = True
         self.__shared_container.callback_mutex = threading.RLock()
         self.__shared_container.registered_mutex = threading.RLock()
@@ -354,11 +354,16 @@ class d2d():
         self.__shared_container.registered_commands = {}
         self.__shared_container.subscribe_patterns = []
         self.__shared_container.registered_info = {}
+        self.__shared_container.service_used_paths = {}
+        self.__shared_container.info_used_paths = {}
+        self.__shared_container.client = None
+
+        self.__checkBrokerConnection()
 
 
     def __del__(self):
-        if self.__client:
-            self.__client.disconnect()
+        if self.__shared_container.client:
+            self.__shared_container.client.disconnect()
         self.__shared_container.run = False
         for socket in self.__command_sockets:
             socket.close()
@@ -397,6 +402,12 @@ class d2d():
 
 
     def __brokerMessaheReceived(message, shared_container):
+
+        # Remove unregistered device/service data
+        if message.topic.startswith(shared_container.local_path) and len(message.payload) > 0:
+            if message.topic not in shared_container.service_used_paths.values() and message.topic not in shared_container.info_used_paths.values():
+                shared_container.client.publish(message.topic, payload="", qos=0, retain=True)
+                return
 
         try:
             command_info = json.loads(message.payload)
@@ -465,16 +476,16 @@ class d2d():
 
     def __checkBrokerConnection(self) -> bool:
 
-        if self.__client:
-            if self.__client.is_connected():
+        if self.__shared_container.client:
+            if self.__shared_container.client.is_connected():
                 return True
             else:
                 for interval in range(50):
                     time.sleep(0.05)
-                    if self.__client.is_connected():
+                    if self.__shared_container.client.is_connected():
                         return True
 
-                return self.__client.is_connected()
+                return self.__shared_container.client.is_connected()
 
 
         discover_client = ServiceDiscovery.client()
@@ -494,7 +505,9 @@ class d2d():
         client.user_data_set(self.__shared_container)
         client.loop_start()
 
-        self.__client = client
+        client.subscribe(self.__shared_container.local_path)
+
+        self.__shared_container.client = client
         return True
 
 
@@ -711,7 +724,7 @@ class d2d():
         self.__threads.append(thread)
 
 
-        self.__service_container[name].path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
+        self.__shared_container.service_used_paths[name] = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
 
         self.__service_container[name].map = {}
         self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
@@ -721,7 +734,7 @@ class d2d():
         self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
 
-        msg_info = self.__client.publish(self.__service_container[name].path, payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
+        msg_info = self.__shared_container.client.publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
@@ -730,7 +743,7 @@ class d2d():
             return False
 
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
-        msg_info = self.__client.publish(self.__service_container[name].path, payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
+        msg_info = self.__shared_container.client.publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
@@ -743,7 +756,7 @@ class d2d():
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
 
         try:
-            self.__client.subscribe(mqtt_path)
+            self.__shared_container.client.subscribe(mqtt_path)
         except:
             return False
 
@@ -775,7 +788,7 @@ class d2d():
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
         try:
-            self.__client.subscribe(mqtt_path)
+            self.__shared_container.client.subscribe(mqtt_path)
         except:
             return False
 
@@ -804,7 +817,7 @@ class d2d():
         if category == "":
             category = d2dConstants.category.GENERIC
 
-        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        self.__shared_container.info_used_paths[name] = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
 
         value_type = self.__getType(value)
         if value_type == "":
@@ -814,5 +827,5 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        msg_info = self.__client.publish(mqtt_path, payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
+        msg_info = self.__shared_container.client.publish(self.__shared_container.info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
