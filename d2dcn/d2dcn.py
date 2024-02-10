@@ -27,7 +27,7 @@ import paho.mqtt.client
 import ServiceDiscovery
 
 
-version = "0.2.1"
+version = "0.3.1"
 
 
 class d2dConstants():
