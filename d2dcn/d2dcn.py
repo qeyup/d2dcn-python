@@ -345,7 +345,7 @@ class d2d():
         self.__command_sockets = []
         self.__service_container = {}
         self.__shared_container = container()
-        self.__shared_container.local_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/#"
+        self.__shared_container.local_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/"
         self.__shared_container.run = True
         self.__shared_container.callback_mutex = threading.RLock()
         self.__shared_container.registered_mutex = threading.RLock()
@@ -505,7 +505,7 @@ class d2d():
         client.user_data_set(self.__shared_container)
         client.loop_start()
 
-        client.subscribe(self.__shared_container.local_path)
+        client.subscribe(self.__shared_container.local_path + "#")
 
         self.__shared_container.client = client
         return True
