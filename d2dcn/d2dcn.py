@@ -36,6 +36,10 @@ class d2dConstants():
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
+    STATE = "state"
+
+    class state:
+        OFFLINE = "offline"
 
     class category:
         GENERIC = "generic"
@@ -224,7 +228,7 @@ class d2dCommandResponse(dict):
 
 class d2dCommand():
 
-    def __init__(self,mac, service, category, name, protocol, ip, port, params, response, enable):
+    def __init__(self,mac, service, category, name, protocol, ip, port, params, response, enable, service_info):
         self.__name = name
         self.__mac = mac
         self.__service = service
@@ -233,7 +237,8 @@ class d2dCommand():
         self.__response = response
         self.__protocol = protocol
         self.__enable = enable
-        if enable:
+        self.__service_info = service_info
+        if enable and service_info.online:
             self.__socket = udpClient(ip, port)
         else:
             self.__socket = None
@@ -270,7 +275,7 @@ class d2dCommand():
 
     @property
     def enable(self):
-        return self.__enable
+        return self.__enable and self.__service_info.online
 
 
     def call(self, args:dict, timeout=10) -> dict:
@@ -291,7 +296,7 @@ class d2dCommand():
 
 class d2dInfo():
 
-    def __init__(self,mac, service, category, name, value, valueType, epoch):
+    def __init__(self,mac, service, category, name, value, valueType, epoch, service_info):
         self.__name = name
         self.__mac = mac
         self.__service = service
@@ -299,6 +304,7 @@ class d2dInfo():
         self.__value = value
         self.__epoch = epoch
         self.__valueType = valueType
+        self.__service_info = service_info
 
     @property
     def name(self):
@@ -328,6 +334,10 @@ class d2dInfo():
     def epoch(self):
         return self.__epoch
 
+    @property
+    def online(self):
+        return self.__service_info.online
+
 
 class d2d():
 
@@ -355,6 +365,7 @@ class d2d():
         self.__shared_container.subscribe_patterns = []
         self.__shared_container.registered_info = {}
         self.__shared_container.service_used_paths = {}
+        self.__shared_container.services = {}
         self.__shared_container.info_used_paths = {}
         self.__shared_container.client = None
 
@@ -409,10 +420,42 @@ class d2d():
                 shared_container.client.publish(message.topic, payload="", qos=0, retain=True)
                 return
 
-        try:
-            command_info = json.loads(message.payload)
-        except:
+        topic_split = message.topic.split("/")
+        if len(topic_split) < 4:
             return
+
+        prefix = topic_split[0]
+        mac = topic_split[1]
+        service = topic_split[2]
+        mode = topic_split[3]
+        service_path = prefix + "/" + mac + "/" + service
+
+        if prefix != d2dConstants.MQTT_PREFIX:
+            return
+
+        with shared_container.registered_mutex:
+            if service_path not in shared_container.services:
+                shared_container.services[service_path] = container()
+                shared_container.services[service_path].online = True
+
+
+        if mode == d2dConstants.STATE:
+            with shared_container.registered_mutex:
+                shared_container.services[service_path].online = message.payload.decode() != d2dConstants.state.OFFLINE
+
+                with shared_container.callback_mutex:
+                    if shared_container.command_update_callback:
+                        for command_path in shared_container.registered_commands:
+                            shared_container.command_update_callback(shared_container.registered_commands[command_path])
+                    if shared_container.info_update_callback:
+                        for info_path in shared_container.registered_info:
+                            shared_container.info_update_callback(shared_container.registered_info[info_path])
+
+
+        if len(topic_split) != 6:
+            return
+        category = topic_split[4]
+        name = topic_split[5]
 
         ok = False
         for subscriber in shared_container.subscribe_patterns:
@@ -423,19 +466,13 @@ class d2d():
         if not ok:
             return
 
-        topic_split = message.topic.split("/")
-        if len(topic_split) != 6:
+
+
+        try:
+            command_info = json.loads(message.payload)
+        except:
             return
 
-        prefix = topic_split[0]
-        mac = topic_split[1]
-        service = topic_split[2]
-        mode = topic_split[3]
-        category = topic_split[4]
-        name = topic_split[5]
-
-        if prefix != d2dConstants.MQTT_PREFIX:
-            return
 
         if mode == d2dConstants.COMMAND_LEVEL:
 
@@ -449,7 +486,7 @@ class d2d():
             except:
                 return
 
-            command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable)
+            command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, shared_container.services[service_path])
             with shared_container.registered_mutex:
                 shared_container.registered_commands[message.topic] = command_object
 
@@ -465,7 +502,7 @@ class d2d():
             except:
                 return
 
-            info_object = d2dInfo(mac, service, category, name, value, valtype, epoch)
+            info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, shared_container.services[service_path])
             with shared_container.registered_mutex:
                 shared_container.registered_info[message.topic] = info_object
 
@@ -497,6 +534,7 @@ class d2d():
 
         client = paho.mqtt.client.Client()
         try:
+            client.will_set(self.__shared_container.local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
             client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
         except:
             return False
@@ -506,6 +544,7 @@ class d2d():
         client.loop_start()
 
         client.subscribe(self.__shared_container.local_path + "#")
+        client.subscribe(d2dConstants.MQTT_PREFIX + "/+/+/" + d2dConstants.STATE)
 
         self.__shared_container.client = client
         return True
