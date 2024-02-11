@@ -361,12 +361,15 @@ class d2d():
         self.__shared_container.registered_mutex = threading.RLock()
         self.__shared_container.command_update_callback = None
         self.__shared_container.info_update_callback = None
+        self.__shared_container.command_remove_callback = None
+        self.__shared_container.info_remove_callback = None
         self.__shared_container.registered_commands = {}
         self.__shared_container.subscribe_patterns = []
         self.__shared_container.registered_info = {}
         self.__shared_container.service_used_paths = {}
         self.__shared_container.services = {}
         self.__shared_container.info_used_paths = {}
+        self.__shared_container.unused_received_paths = []
         self.__shared_container.client = None
 
         self.__checkBrokerConnection()
@@ -381,6 +384,7 @@ class d2d():
         for thread in self.__threads:
             thread.join()
 
+
     @property
     def service(self):
         return self.__service
@@ -393,7 +397,8 @@ class d2d():
 
     @property
     def onCommandUpdate(self):
-        return self.__shared_container.command_update_callback
+        with self.__shared_container.callback_mutex:
+            return self.__shared_container.command_update_callback
 
 
     @onCommandUpdate.setter
@@ -402,8 +407,21 @@ class d2d():
             self.__shared_container.command_update_callback = callback
 
     @property
+    def onCommandRemove(self):
+        with self.__shared_container.callback_mutex:
+            return self.__shared_container.command_remove_callback
+
+
+    @onCommandRemove.setter
+    def onCommandRemove(self, callback):
+        with self.__shared_container.callback_mutex:
+            self.__shared_container.command_remove_callback = callback
+
+
+    @property
     def onInfoUpdate(self):
-        return self.__shared_container.info_update_callback
+        with self.__shared_container.callback_mutex:
+            return self.__shared_container.info_update_callback
 
 
     @onInfoUpdate.setter
@@ -412,12 +430,27 @@ class d2d():
             self.__shared_container.info_update_callback = callback
 
 
+    @property
+    def onInfoRemove(self):
+        with self.__shared_container.callback_mutex:
+            return self.__shared_container.info_remove_callback
+
+
+    @onInfoRemove.setter
+    def onInfoRemove(self, callback):
+        with self.__shared_container.callback_mutex:
+            self.__shared_container.info_remove_callback = callback
+
+
     def __brokerMessaheReceived(message, shared_container):
 
         # Remove unregistered device/service data
-        if message.topic.startswith(shared_container.local_path) and len(message.payload) > 0:
-            if message.topic not in shared_container.service_used_paths.values() and message.topic not in shared_container.info_used_paths.values():
-                shared_container.client.publish(message.topic, payload="", qos=0, retain=True)
+        with shared_container.registered_mutex:
+            if message.topic.startswith(shared_container.local_path) and len(message.payload) > 0:
+                if message.topic not in shared_container.service_used_paths.values() \
+                    and message.topic not in shared_container.info_used_paths.values():
+                    if message.topic not in shared_container.unused_received_paths:
+                        shared_container.unused_received_paths.append(message.topic)
                 return
 
         topic_split = message.topic.split("/")
@@ -471,44 +504,68 @@ class d2d():
         try:
             command_info = json.loads(message.payload)
         except:
-            return
+            command_info = None
 
+        if command_info:
 
-        if mode == d2dConstants.COMMAND_LEVEL:
+            if mode == d2dConstants.COMMAND_LEVEL:
 
-            try:
-                protocol = command_info[d2dConstants.commandField.PROTOCOL]
-                ip = command_info[d2dConstants.commandField.IP]
-                port = command_info[d2dConstants.commandField.PORT]
-                params = command_info[d2dConstants.commandField.INPUT]
-                response = command_info[d2dConstants.commandField.OUTPUT]
-                enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
-            except:
-                return
+                try:
+                    protocol = command_info[d2dConstants.commandField.PROTOCOL]
+                    ip = command_info[d2dConstants.commandField.IP]
+                    port = command_info[d2dConstants.commandField.PORT]
+                    params = command_info[d2dConstants.commandField.INPUT]
+                    response = command_info[d2dConstants.commandField.OUTPUT]
+                    enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
+                except:
+                    return
 
-            command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, shared_container.services[service_path])
-            with shared_container.registered_mutex:
-                shared_container.registered_commands[message.topic] = command_object
+                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, shared_container.services[service_path])
+                with shared_container.registered_mutex:
+                    shared_container.registered_commands[message.topic] = command_object
 
-            with shared_container.callback_mutex:
-                if shared_container.command_update_callback:
-                    shared_container.command_update_callback(command_object)
+                with shared_container.callback_mutex:
+                    if shared_container.command_update_callback:
+                        shared_container.command_update_callback(command_object)
 
-        elif mode == d2dConstants.INFO_LEVEL:
-            try:
-                value = command_info[d2dConstants.infoField.VALUE]
-                valtype = command_info[d2dConstants.infoField.TYPE]
-                epoch = command_info[d2dConstants.infoField.EPOCH]
-            except:
-                return
+            elif mode == d2dConstants.INFO_LEVEL:
+                try:
+                    value = command_info[d2dConstants.infoField.VALUE]
+                    valtype = command_info[d2dConstants.infoField.TYPE]
+                    epoch = command_info[d2dConstants.infoField.EPOCH]
+                except:
+                    return
 
-            info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, shared_container.services[service_path])
-            with shared_container.registered_mutex:
-                shared_container.registered_info[message.topic] = info_object
+                info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, shared_container.services[service_path])
+                with shared_container.registered_mutex:
+                    shared_container.registered_info[message.topic] = info_object
 
-            with shared_container.callback_mutex:
-                if shared_container.info_update_callback:
-                    shared_container.info_update_callback(info_object)
+                with shared_container.callback_mutex:
+                    if shared_container.info_update_callback:
+                        shared_container.info_update_callback(info_object)
+
+        else:
+            removed_item = None
+
+            if mode == d2dConstants.COMMAND_LEVEL:
+                with shared_container.registered_mutex:
+                    if message.topic in shared_container.registered_commands:
+                        removed_item = shared_container.registered_commands.pop(message.topic)
+
+                if removed_item:
+                    with shared_container.callback_mutex:
+                        if shared_container.command_remove_callback:
+                            shared_container.command_remove_callback(removed_item)
+
+            elif mode == d2dConstants.INFO_LEVEL:
+                with shared_container.registered_mutex:
+                    if message.topic in shared_container.registered_info:
+                        removed_item = shared_container.registered_info.pop(message.topic)
+
+                if removed_item:
+                    with shared_container.callback_mutex:
+                        if shared_container.info_remove_callback:
+                            shared_container.info_remove_callback(removed_item)
 
 
     def __checkBrokerConnection(self) -> bool:
@@ -868,3 +925,14 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
         msg_info = self.__shared_container.client.publish(self.__shared_container.info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
+
+
+    def removeUnregistered(self):
+        with self.__shared_container.registered_mutex:
+            for path in self.__shared_container.unused_received_paths:
+                if path not in self.__shared_container.service_used_paths.values() \
+                    and path not in self.__shared_container.info_used_paths.values():
+
+                    self.__shared_container.client.publish(path, payload="", qos=0, retain=True)
+
+            self.__shared_container.unused_received_paths.clear()
