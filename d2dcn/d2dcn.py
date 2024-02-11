@@ -445,7 +445,7 @@ class d2d():
             self.__shared_container.info_remove_callback = callback
 
 
-    def __brokerMessaheReceived(message, shared_container):
+    def __brokerMessageReceived(message, shared_container):
 
         # Remove unregistered device/service data
         with shared_container.registered_mutex:
@@ -472,7 +472,7 @@ class d2d():
         with shared_container.registered_mutex:
             if service_path not in shared_container.services:
                 shared_container.services[service_path] = container()
-                shared_container.services[service_path].online = True
+            shared_container.services[service_path].online = True
 
 
         if mode == d2dConstants.STATE:
@@ -599,7 +599,7 @@ class d2d():
         except:
             return False
 
-        client.on_message = lambda client, shared_container, message : d2d.__brokerMessaheReceived(message, shared_container)
+        client.on_message = lambda client, shared_container, message : d2d.__brokerMessageReceived(message, shared_container)
         client.user_data_set(self.__shared_container)
         client.loop_start()
 
