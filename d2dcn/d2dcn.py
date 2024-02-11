@@ -497,11 +497,13 @@ class d2d():
                         for info_path in self.__registered_info:
                             self.__info_update_callback(self.__registered_info[info_path])
 
+            return
 
-        if len(topic_split) != 6:
+
+        if len(topic_split) < 6:
             return
         category = topic_split[4]
-        name = topic_split[5]
+        name = "/".join(topic_split[5:])
 
         ok = False
         for subscriber in self.__subscribe_patterns:
@@ -650,6 +652,9 @@ class d2d():
         if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
             return ""
 
+        if "#" in mac + service + category + mode + name:
+            return None
+
         mqtt_path = d2dConstants.MQTT_PREFIX + "/"
 
         if mac != "" and not d2d.__checkIfRegEx(mac):
@@ -673,9 +678,7 @@ class d2d():
         if name != "" and not d2d.__checkIfRegEx(name):
             mqtt_path += name
         else:
-            mqtt_path += "+"
-
-        mqtt_path = mqtt_path.replace("#", "")
+            mqtt_path += "#"
 
         return mqtt_path
 
@@ -826,22 +829,31 @@ class d2d():
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
 
 
-    def __publish(self, path, payload):
-        if path not in self.__publications or self.__publications[path] != payload:
-            try:
-                msg_info = self.__client.publish(path, payload=payload, qos=1, retain=True)
-                if msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS:
-                    with self.__registered_mutex:
-                        self.__publications[path] = payload
-                    return True
-                else:
-                    return False
+    def __publish(self, path, payload=None):
+        if not payload:
+            self.__client.publish(path, payload=None, qos=1, retain=True)
+            with self.__registered_mutex:
+                if path in self.__publications:
+                    self.__publications.pop(path)
 
-            except:
-                return False
+            return True
 
         else:
-            return True
+            if path not in self.__publications or self.__publications[path] != payload:
+                try:
+                    msg_info = self.__client.publish(path, payload=payload, qos=1, retain=True)
+                    if msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS:
+                        with self.__registered_mutex:
+                            self.__publications[path] = payload
+                        return True
+                    else:
+                        return False
+
+                except:
+                    return False
+
+            else:
+                return True
 
 
     def __subscribe(self, mqtt_path):
@@ -886,7 +898,10 @@ class d2d():
         self.__threads.append(thread)
 
 
-        self.__service_used_paths[name] = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
+        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
+        if not mqtt_path:
+            return False
+        self.__service_used_paths[name] = mqtt_path
 
         self.__service_container[name].map = {}
         self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
@@ -912,8 +927,10 @@ class d2d():
         if not self.__checkBrokerConnection():
             return False
 
-        mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
+        mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
+        if not mqtt_path:
+            return False
 
         if not self.__subscribe(mqtt_path):
             return False
@@ -972,7 +989,10 @@ class d2d():
         if category == "":
             category = d2dConstants.category.GENERIC
 
-        self.__info_used_paths[name] = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        if not mqtt_path:
+            return False
+        self.__info_used_paths[name] = mqtt_path
 
         value_type = self.__getType(value)
         if value_type == "":
@@ -982,8 +1002,7 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        msg_info = self.__client.publish(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
-        return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
+        return self.__publish(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1))
 
 
     def removeUnregistered(self):
@@ -992,6 +1011,6 @@ class d2d():
                 if path not in self.__service_used_paths.values() \
                     and path not in self.__info_used_paths.values():
 
-                    self.__client.publish(path, payload="", qos=0, retain=True)
+                    self.__publish(path)
 
             self.__unused_received_paths.clear()
