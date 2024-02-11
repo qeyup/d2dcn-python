@@ -25,6 +25,7 @@ import json
 import re
 import paho.mqtt.client
 import ServiceDiscovery
+import weakref
 
 
 version = "0.3.1"
@@ -373,14 +374,17 @@ class d2d():
         self.__shared_container.services = {}
         self.__shared_container.info_used_paths = {}
         self.__shared_container.unused_received_paths = []
-        self.__shared_container.client = None
+
+        self.__subscriptions = []
+        self.__publications = {}
+        self.__client = None
 
         self.__checkBrokerConnection()
 
 
     def __del__(self):
-        if self.__shared_container.client:
-            self.__shared_container.client.disconnect()
+        if self.__client:
+            self.__client.disconnect()
         self.__shared_container.run = False
         for socket in self.__command_sockets:
             socket.close()
@@ -445,15 +449,19 @@ class d2d():
             self.__shared_container.info_remove_callback = callback
 
 
-    def __brokerMessageReceived(message, shared_container):
+    def __brokerMessageReceived(message, weak_self):
+
+        self = weak_self()
+        if not self:
+            return
 
         # Remove unregistered device/service data
-        with shared_container.registered_mutex:
-            if message.topic.startswith(shared_container.local_path) and len(message.payload) > 0:
-                if message.topic not in shared_container.service_used_paths.values() \
-                    and message.topic not in shared_container.info_used_paths.values():
-                    if message.topic not in shared_container.unused_received_paths:
-                        shared_container.unused_received_paths.append(message.topic)
+        with self.__shared_container.registered_mutex:
+            if message.topic.startswith(self.__shared_container.local_path) and len(message.payload) > 0:
+                if message.topic not in self.__shared_container.service_used_paths.values() \
+                    and message.topic not in self.__shared_container.info_used_paths.values():
+                    if message.topic not in self.__shared_container.unused_received_paths:
+                        self.__shared_container.unused_received_paths.append(message.topic)
                 return
 
         topic_split = message.topic.split("/")
@@ -469,23 +477,23 @@ class d2d():
         if prefix != d2dConstants.MQTT_PREFIX:
             return
 
-        with shared_container.registered_mutex:
-            if service_path not in shared_container.services:
-                shared_container.services[service_path] = container()
-            shared_container.services[service_path].online = True
+        with self.__shared_container.registered_mutex:
+            if service_path not in self.__shared_container.services:
+                self.__shared_container.services[service_path] = container()
+            self.__shared_container.services[service_path].online = True
 
 
         if mode == d2dConstants.STATE:
-            with shared_container.registered_mutex:
-                shared_container.services[service_path].online = message.payload.decode() != d2dConstants.state.OFFLINE
+            with self.__shared_container.registered_mutex:
+                self.__shared_container.services[service_path].online = message.payload.decode() != d2dConstants.state.OFFLINE
 
-                with shared_container.callback_mutex:
-                    if shared_container.command_update_callback:
-                        for command_path in shared_container.registered_commands:
-                            shared_container.command_update_callback(shared_container.registered_commands[command_path])
-                    if shared_container.info_update_callback:
-                        for info_path in shared_container.registered_info:
-                            shared_container.info_update_callback(shared_container.registered_info[info_path])
+                with self.__shared_container.callback_mutex:
+                    if self.__shared_container.command_update_callback:
+                        for command_path in self.__shared_container.registered_commands:
+                            self.__shared_container.command_update_callback(self.__shared_container.registered_commands[command_path])
+                    if self.__shared_container.info_update_callback:
+                        for info_path in self.__shared_container.registered_info:
+                            self.__shared_container.info_update_callback(self.__shared_container.registered_info[info_path])
 
 
         if len(topic_split) != 6:
@@ -494,7 +502,7 @@ class d2d():
         name = topic_split[5]
 
         ok = False
-        for subscriber in shared_container.subscribe_patterns:
+        for subscriber in self.__shared_container.subscribe_patterns:
 
             if re.search(subscriber, message.topic):
                 ok = True
@@ -523,13 +531,13 @@ class d2d():
                 except:
                     return
 
-                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, shared_container.services[service_path])
-                with shared_container.registered_mutex:
-                    shared_container.registered_commands[message.topic] = command_object
+                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, self.__shared_container.services[service_path])
+                with self.__shared_container.registered_mutex:
+                    self.__shared_container.registered_commands[message.topic] = command_object
 
-                with shared_container.callback_mutex:
-                    if shared_container.command_update_callback:
-                        shared_container.command_update_callback(command_object)
+                with self.__shared_container.callback_mutex:
+                    if self.__shared_container.command_update_callback:
+                        self.__shared_container.command_update_callback(command_object)
 
             elif mode == d2dConstants.INFO_LEVEL:
                 try:
@@ -539,50 +547,50 @@ class d2d():
                 except:
                     return
 
-                info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, shared_container.services[service_path])
-                with shared_container.registered_mutex:
-                    shared_container.registered_info[message.topic] = info_object
+                info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, self.__shared_container.services[service_path])
+                with self.__shared_container.registered_mutex:
+                    self.__shared_container.registered_info[message.topic] = info_object
 
-                with shared_container.callback_mutex:
-                    if shared_container.info_update_callback:
-                        shared_container.info_update_callback(info_object)
+                with self.__shared_container.callback_mutex:
+                    if self.__shared_container.info_update_callback:
+                        self.__shared_container.info_update_callback(info_object)
 
         else:
             removed_item = None
 
             if mode == d2dConstants.COMMAND_LEVEL:
-                with shared_container.registered_mutex:
-                    if message.topic in shared_container.registered_commands:
-                        removed_item = shared_container.registered_commands.pop(message.topic)
+                with self.__shared_container.registered_mutex:
+                    if message.topic in self.__shared_container.registered_commands:
+                        removed_item = self.__shared_container.registered_commands.pop(message.topic)
 
                 if removed_item:
-                    with shared_container.callback_mutex:
-                        if shared_container.command_remove_callback:
-                            shared_container.command_remove_callback(removed_item)
+                    with self.__shared_container.callback_mutex:
+                        if self.__shared_container.command_remove_callback:
+                            self.__shared_container.command_remove_callback(removed_item)
 
             elif mode == d2dConstants.INFO_LEVEL:
-                with shared_container.registered_mutex:
-                    if message.topic in shared_container.registered_info:
-                        removed_item = shared_container.registered_info.pop(message.topic)
+                with self.__shared_container.registered_mutex:
+                    if message.topic in self.__shared_container.registered_info:
+                        removed_item = self.__shared_container.registered_info.pop(message.topic)
 
                 if removed_item:
-                    with shared_container.callback_mutex:
-                        if shared_container.info_remove_callback:
-                            shared_container.info_remove_callback(removed_item)
+                    with self.__shared_container.callback_mutex:
+                        if self.__shared_container.info_remove_callback:
+                            self.__shared_container.info_remove_callback(removed_item)
 
 
     def __checkBrokerConnection(self) -> bool:
 
-        if self.__shared_container.client:
-            if self.__shared_container.client.is_connected():
+        if self.__client:
+            if self.__client.is_connected():
                 return True
             else:
                 for interval in range(50):
                     time.sleep(0.05)
-                    if self.__shared_container.client.is_connected():
+                    if self.__client.is_connected():
                         return True
 
-                return self.__shared_container.client.is_connected()
+                return self.__client.is_connected()
 
 
         discover_client = ServiceDiscovery.client()
@@ -592,22 +600,43 @@ class d2d():
             return False
 
 
-        client = paho.mqtt.client.Client()
+        client = paho.mqtt.client.Client(client_id=self.__mac + "/" + self.__service)
         try:
             client.will_set(self.__shared_container.local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
             client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
         except:
             return False
 
-        client.on_message = lambda client, shared_container, message : d2d.__brokerMessageReceived(message, shared_container)
-        client.user_data_set(self.__shared_container)
+        client.on_message = lambda client, weak_self, message : d2d.__brokerMessageReceived(message, weak_self)
+        client.on_connect = lambda client, weak_self, flags, rc : d2d.__onConnect(weak_self)
+        client.user_data_set(weakref.ref(self))
         client.loop_start()
 
-        client.subscribe(self.__shared_container.local_path + "#")
-        client.subscribe(d2dConstants.MQTT_PREFIX + "/+/+/" + d2dConstants.STATE)
+        self.__client = client
 
-        self.__shared_container.client = client
+        self.__subscribe(self.__shared_container.local_path + "#")
+        self.__subscribe(d2dConstants.MQTT_PREFIX + "/+/+/" + d2dConstants.STATE)
+
         return True
+
+
+    def __onConnect(weak_self):
+        self = weak_self()
+        if not self:
+            return
+
+        with self.__shared_container.registered_mutex:
+            for path in self.__publications:
+                try:
+                    self.__client.publish(path, payload=self.__publications[path], qos=1, retain=True)
+                except:
+                    pass
+
+            for path in self.__subscriptions:
+                try:
+                    self.__client.subscribe(path, qos=1)
+                except:
+                    pass
 
 
     def __checkIfRegEx(string):
@@ -794,6 +823,36 @@ class d2d():
                 socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
 
 
+    def __publish(self, path, payload):
+        if path not in self.__publications or self.__publications[path] != payload:
+            try:
+                msg_info = self.__client.publish(path, payload=payload, qos=1, retain=True)
+                if msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS:
+                    with self.__shared_container.registered_mutex:
+                        self.__publications[path] = payload
+                    return True
+                else:
+                    return False
+
+            except:
+                return False
+
+        else:
+            return True
+
+
+    def __subscribe(self, mqtt_path):
+        if mqtt_path not in self.__subscriptions:
+            try:
+                self.__client.subscribe(mqtt_path, qos=1)
+                with self.__shared_container.registered_mutex:
+                    self.__subscriptions.append(mqtt_path)
+            except:
+                return False
+
+        return True
+
+
     def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True)-> bool:
 
         if not cmdCallback:
@@ -833,8 +892,7 @@ class d2d():
         self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
 
-        msg_info = self.__shared_container.client.publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
-        return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
+        return self.__publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
 
 
     def enableCommand(self, name, enable):
@@ -842,8 +900,7 @@ class d2d():
             return False
 
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
-        msg_info = self.__shared_container.client.publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1), qos=1, retain=True)
-        return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
+        return self.__publish(self.__shared_container.service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
 
 
     def subscribeComands(self, mac:str="", service:str="", category:str="", command:str="") -> bool:
@@ -854,11 +911,8 @@ class d2d():
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
 
-        try:
-            self.__shared_container.client.subscribe(mqtt_path)
-        except:
+        if not self.__subscribe(mqtt_path):
             return False
-
 
         if regex_path not in self.__shared_container.subscribe_patterns:
             self.__shared_container.subscribe_patterns.append(regex_path)
@@ -886,9 +940,7 @@ class d2d():
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
-        try:
-            self.__shared_container.client.subscribe(mqtt_path)
-        except:
+        if not self.__subscribe(mqtt_path):
             return False
 
         if regex_path not in self.__shared_container.subscribe_patterns:
@@ -926,7 +978,7 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        msg_info = self.__shared_container.client.publish(self.__shared_container.info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
+        msg_info = self.__client.publish(self.__shared_container.info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1), qos=1, retain=True)
         return msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS
 
 
@@ -936,6 +988,6 @@ class d2d():
                 if path not in self.__shared_container.service_used_paths.values() \
                     and path not in self.__shared_container.info_used_paths.values():
 
-                    self.__shared_container.client.publish(path, payload="", qos=0, retain=True)
+                    self.__client.publish(path, payload="", qos=0, retain=True)
 
             self.__shared_container.unused_received_paths.clear()
