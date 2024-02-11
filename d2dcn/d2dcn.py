@@ -341,12 +341,15 @@ class d2dInfo():
 
 class d2d():
 
-    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1):
+    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1, service=None):
         self.__mac = hex(uuid.getnode()).replace("0x", "")
 
-        process = psutil.Process(os.getpid())
-        process_name = process.name()
-        self.__service = process_name.split(".")[0]
+        if service:
+            self.__service = service
+        else:
+            process = psutil.Process(os.getpid())
+            process_name = process.name()
+            self.__service = process_name.split(".")[0]
 
         self.__broker_discover_timeout = broker_discover_timeout
         self.__broker_discover_retry = broker_discover_retry
