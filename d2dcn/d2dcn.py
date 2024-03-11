@@ -28,7 +28,7 @@ import ServiceDiscovery
 import weakref
 
 
-version = "0.3.1"
+version = "0.3.2"
 
 
 class d2dConstants():
@@ -62,6 +62,7 @@ class d2dConstants():
         INPUT = "input"
         OUTPUT = "output"
         ENABLE = "enable"
+        TIMEOUT = "timeout"
 
     class commandProtocol():
         JSON_UDP = "json-udp"
@@ -229,7 +230,7 @@ class d2dCommandResponse(dict):
 
 class d2dCommand():
 
-    def __init__(self,mac, service, category, name, protocol, ip, port, params, response, enable, service_info):
+    def __init__(self,mac, service, category, name, protocol, ip, port, params, response, enable, timeout, service_info):
         self.__name = name
         self.__mac = mac
         self.__service = service
@@ -238,6 +239,7 @@ class d2dCommand():
         self.__response = response
         self.__protocol = protocol
         self.__enable = enable
+        self.__timeout = timeout
         self.__service_info = service_info
         if enable and service_info.online:
             self.__socket = udpClient(ip, port)
@@ -274,12 +276,16 @@ class d2dCommand():
     def response(self):
         return self.__response
 
+
     @property
     def enable(self):
         return self.__enable and self.__service_info.online
 
 
-    def call(self, args:dict, timeout=10) -> dict:
+    def call(self, args:dict, timeout=None) -> dict:
+
+        if not timeout:
+            timeout = self.__timeout
 
         if self.__socket == None:
             return d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR
@@ -532,10 +538,11 @@ class d2d():
                     params = command_info[d2dConstants.commandField.INPUT]
                     response = command_info[d2dConstants.commandField.OUTPUT]
                     enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
+                    timeout = 5 if d2dConstants.commandField.TIMEOUT not in command_info else command_info[d2dConstants.commandField.TIMEOUT]
                 except:
                     return
 
-                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, self.__services[service_path])
+                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, timeout, self.__services[service_path])
                 with self.__registered_mutex:
                     self.__registered_commands[message.topic] = command_object
 
@@ -868,7 +875,7 @@ class d2d():
         return True
 
 
-    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True)-> bool:
+    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5)-> bool:
 
         if not cmdCallback:
             return False
@@ -910,6 +917,7 @@ class d2d():
         self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
         self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
+        self.__service_container[name].map[d2dConstants.commandField.TIMEOUT] = timeout
 
         return self.__publish(self.__service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
 
