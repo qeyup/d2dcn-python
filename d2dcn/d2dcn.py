@@ -118,7 +118,11 @@ class udpRandomPortListener():
     def send(self, ip, port, msg):
         if isinstance(msg, str):
             msg = msg.encode()
-        self.__sock.sendto(msg, (ip, port))
+
+        chn_msg = [msg[idx : idx + 1500] for idx in range(0, len(msg), 1500)]
+
+        for chn in chn_msg:
+            self.__sock.sendto(chn, (ip, port))
 
 
     @property
@@ -171,7 +175,11 @@ class udpClient():
     def send(self, msg):
         if isinstance(msg, str):
             msg = msg.encode()
-        self.__sock.sendto(msg, (self.__remote_ip, self.__remote_port))
+
+        chn_msg = [msg[idx : idx + 1500] for idx in range(0, len(msg), 1500)]
+
+        for chn in chn_msg:
+            self.__sock.sendto(chn, (self.__remote_ip, self.__remote_port))
 
 
     @property
@@ -210,6 +218,8 @@ class d2dCommandResponse(dict):
             for item in response_dict:
                 self[item] = response_dict[item]
             self.__success = True
+            self.__error = None
+
 
         except:
             if isinstance(str_response, str):
@@ -293,7 +303,16 @@ class d2dCommand():
         try:
             response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
-            response = self.__socket.read(timeout).decode()
+            response = ""
+            while True:
+                read_response = self.__socket.read(timeout).decode()
+                if not read_response:
+                    break
+                elif read_response[-1] == "}":
+                    response += read_response
+                    break
+                else:
+                    response += read_response
 
         except:
             pass
