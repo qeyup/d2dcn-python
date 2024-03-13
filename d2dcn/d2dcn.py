@@ -34,6 +34,7 @@ version = "0.3.2"
 class d2dConstants():
     MQTT_SERVICE_NAME = "MQTT_BROKER"
     MQTT_BROKER_PORT = 1883
+    MTU = 4096
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
@@ -66,6 +67,7 @@ class d2dConstants():
 
     class commandProtocol():
         JSON_UDP = "json-udp"
+        JSON_TCP = "json-tcp"
 
     class infoField():
         VALUE = "value"
@@ -87,6 +89,7 @@ class container():
 class udpRandomPortListener():
 
     def __init__(self):
+        super().__init__()
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__sock.bind(('', 0))
@@ -102,7 +105,7 @@ class udpRandomPortListener():
         current_epoch_time = int(time.time())
         while self.__open:
             try:
-                data, (ip, port) = self.__sock.recvfrom(4096)
+                data, (ip, port) = self.__sock.recvfrom(d2dConstants.MTU)
                 return data, ip, port
 
             except socket.timeout:
@@ -119,7 +122,7 @@ class udpRandomPortListener():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + 1500] for idx in range(0, len(msg), 1500)]
+        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
 
         for chn in chn_msg:
             self.__sock.sendto(chn, (ip, port))
@@ -159,7 +162,7 @@ class udpClient():
         current_epoch_time = int(time.time())
         while self.__open:
             try:
-                data = self.__sock.recv(4096)
+                data = self.__sock.recv(d2dConstants.MTU)
                 return data
 
             except socket.timeout:
@@ -176,7 +179,7 @@ class udpClient():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + 1500] for idx in range(0, len(msg), 1500)]
+        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
 
         for chn in chn_msg:
             self.__sock.sendto(chn, (self.__remote_ip, self.__remote_port))
@@ -201,6 +204,121 @@ class udpClient():
     @property
     def remote_port(self):
         return self.__remote_port
+
+
+    def close(self):
+        self.__open = False
+        self.__sock.close()
+
+
+class tcpRandomPortListener():
+
+
+    class connection():
+
+        def __init__(self, connection, ip, port):
+            self.__sock = connection
+            self.__ip = ip
+            self.__port = port
+
+
+        def read(self, timeout=-1):
+
+            current_epoch_time = int(time.time())
+            while self.__open:
+                try:
+                    data = self.__sock.recv(d2dConstants.MTU)
+                    return data, True
+
+                except socket.timeout:
+                    if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
+                        return None, True
+
+                except socket.error:
+                    return None, False
+
+            return None, False
+
+
+        def send(self, msg):
+            if isinstance(msg, str):
+                msg = msg.encode()
+
+            chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+
+            for chn in chn_msg:
+                self.__sock.sendall(chn)
+
+
+        @property
+        def ip(self):
+            hostname = socket.gethostname()
+            return socket.gethostbyname(hostname)
+
+
+        @property
+        def port(self):
+            return self.__sock.getsockname()[1]
+
+
+        def close(self):
+            self.__sock.close()
+
+
+    def __init__(self):
+        super().__init__()
+        self.__open = True
+        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.__sock.bind(('', 0))
+        self.__sock.settimeout(0.1)
+
+
+    def __del__(self):
+        self.close()
+
+
+    def read(self, timeout=-1):
+
+        current_epoch_time = int(time.time())
+        while self.__open:
+            try:
+                data, (ip, port) = self.__sock.recvfrom(d2dConstants.MTU)
+                return data, ip, port
+
+            except socket.timeout:
+                if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
+                    return None, None, None
+
+            except socket.error:
+                return None, None, None
+
+        return None, None, None
+
+
+    def send(self, ip, port, msg):
+        if isinstance(msg, str):
+            msg = msg.encode()
+
+        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+
+        for chn in chn_msg:
+            self.__sock.sendto(chn, (ip, port))
+
+
+    @property
+    def ip(self):
+        hostname = socket.gethostname()
+        return socket.gethostbyname(hostname)
+
+
+    @property
+    def port(self):
+        return self.__sock.getsockname()[1]
+
+
+    def waitConnection(self):
+        connection, (ip, port) = self.__sock.accept()
+        return tcpRandomPortListener.connection(connection, ip, port)
 
 
     def close(self):
@@ -252,7 +370,14 @@ class d2dCommand():
         self.__timeout = timeout
         self.__service_info = service_info
         if enable and service_info.online:
-            self.__socket = udpClient(ip, port)
+            if protocol == d2dConstants.commandProtocol.JSON_UDP:
+                self.__socket = udpClient(ip, port)
+
+            elif protocol == d2dConstants.commandProtocol.JSON_TCP:
+                self.__socket = udpClient(ip, port)
+
+            else:
+                self.__socket = None
         else:
             self.__socket = None
 
@@ -290,6 +415,11 @@ class d2dCommand():
     @property
     def enable(self):
         return self.__enable and self.__service_info.online
+
+
+    @property
+    def protocol(self):
+        return self.__protocol
 
 
     def call(self, args:dict, timeout=None) -> dict:
@@ -810,32 +940,25 @@ class d2d():
         return True
 
 
-    def __commandListenThead(socket, service_container, command_callback, input_params, output_params):
-
-        while service_container.run:
-            read, ip, port = socket.read()
-            if not read:
-                break
-
+    def __jsonCommandRequest(request, service_container, command_callback, input_params, output_params):
 
             # json -> map
             try:
-                args = json.loads(read)
+                args = json.loads(request)
+
             except:
-                socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
-                continue
+                return d2dConstants.commandErrorMsg.BAD_INPUT
+
 
 
             # Ignore if disable
             if not service_container.map[d2dConstants.commandField.ENABLE]:
-                socket.send(ip, port, d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR)
-                continue
+                return d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR
 
 
             # Check args
             if not d2d.__checkInOutField(args, input_params):
-                socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_INPUT)
-                continue
+                return d2dConstants.commandErrorMsg.BAD_INPUT
 
 
             # Call command
@@ -844,15 +967,30 @@ class d2d():
 
                 # Check args
                 if not d2d.__checkInOutField(response_dict, output_params):
-                    socket.send(ip, port, d2dConstants.commandErrorMsg.BAD_OUTPUT)
+                    return d2dConstants.commandErrorMsg.BAD_OUTPUT
 
                 else:
                     # map -> json
                     response = json.dumps(response_dict, indent=1)
-                    socket.send(ip, port, response)
+                    return response
 
             else:
-                socket.send(ip, port, d2dConstants.commandErrorMsg.CALLBACK_ERROR)
+                return d2dConstants.commandErrorMsg.CALLBACK_ERROR
+
+
+    def __udpListenerThread(socket, service_container, command_callback, input_params, output_params):
+
+        while service_container.run:
+            request, ip, port = socket.read()
+            if not request:
+                break
+
+            response = d2d.__jsonCommandRequest(request, service_container, command_callback, input_params, output_params)
+            try:
+                socket.send(ip, port, response)
+
+            except:
+                pass
 
 
     def __publish(self, path, payload=None):
@@ -894,7 +1032,7 @@ class d2d():
         return True
 
 
-    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5)-> bool:
+    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5, protocol=d2dConstants.commandProtocol.JSON_UDP)-> bool:
 
         if not cmdCallback:
             return False
@@ -917,11 +1055,22 @@ class d2d():
         self.__service_container[name] = container()
         self.__service_container[name].run = True
 
-        listen_socket = udpRandomPortListener()
-        self.__command_sockets.append(listen_socket)
-        thread = threading.Thread(target=d2d.__commandListenThead, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
-        thread.start()
-        self.__threads.append(thread)
+        if protocol == d2dConstants.commandProtocol.JSON_UDP:
+            listen_socket = udpRandomPortListener()
+            self.__command_sockets.append(listen_socket)
+            thread = threading.Thread(target=d2d.__udpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
+            thread.start()
+            self.__threads.append(thread)
+
+        elif protocol == d2dConstants.commandProtocol.JSON_TCP:
+            listen_socket = udpRandomPortListener()
+            self.__command_sockets.append(listen_socket)
+            thread = threading.Thread(target=d2d.__udpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
+            thread.start()
+            self.__threads.append(thread)
+
+        else:
+            return False
 
 
         mqtt_path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
@@ -930,7 +1079,7 @@ class d2d():
         self.__service_used_paths[name] = mqtt_path
 
         self.__service_container[name].map = {}
-        self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = d2dConstants.commandProtocol.JSON_UDP
+        self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = protocol
         self.__service_container[name].map[d2dConstants.commandField.IP] = listen_socket.ip
         self.__service_container[name].map[d2dConstants.commandField.PORT] = listen_socket.port
         self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
