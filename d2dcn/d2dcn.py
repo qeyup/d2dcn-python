@@ -664,6 +664,7 @@ class d2d():
         with self.__callback_mutex:
             self.__command_update_callback = callback
 
+
     @property
     def onCommandRemove(self):
         with self.__callback_mutex:
@@ -854,7 +855,7 @@ class d2d():
             return False
 
 
-        client = paho.mqtt.client.Client(client_id=self.__mac + "/" + self.__service)
+        client = paho.mqtt.client.Client()
         try:
             client.will_set(self.__local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
             client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
