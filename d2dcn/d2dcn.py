@@ -522,23 +522,20 @@ class d2dCommand():
         try:
             response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
-            response = ""
-            while True:
-                read_response = self.__socket.read(timeout)
-                if not read_response:
-                    break
-                else:
-                    read_response = read_response.decode()
-                    if read_response[-1] == "}":
-                        response += read_response
-                        break
+            response = self.__socket.read(timeout)
+            if response:
+                response = response.decode()
+                while response.startswith("{") and not response.endswith("}"):
+                    read_response = self.__socket.read(timeout)
+                    if read_response:
+                        response += read_response.decode()
                     else:
-                        response += read_response
+                        break
 
         except:
             pass
 
-        if response == "":
+        if not response or response == "":
             response = d2dConstants.commandErrorMsg.TIMEOUT_ERROR
 
         return d2dCommandResponse(response) 
