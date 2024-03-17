@@ -35,6 +35,7 @@ class d2dConstants():
     MQTT_SERVICE_NAME = "MQTT_BROKER"
     MQTT_BROKER_PORT = 1883
     MTU = 4096
+    MAX_LISTEN_TCP_SOKETS = 0
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
@@ -53,6 +54,7 @@ class d2dConstants():
         BAD_OUTPUT = "Invalid output"
         CALLBACK_ERROR = "Command error"
         CONNECTION_ERROR = "Connection error"
+        TIMEOUT_ERROR = "Timeout error"
         EXCEPTION_ERROR = "Exception raised"
         NOT_ENABLE_ERROR = "Command not enable"
 
@@ -220,6 +222,8 @@ class tcpRandomPortListener():
             self.__sock = connection
             self.__ip = ip
             self.__port = port
+            self.__open = True
+            self.__sock.settimeout(0.1)
 
 
         def read(self, timeout=-1):
@@ -228,16 +232,16 @@ class tcpRandomPortListener():
             while self.__open:
                 try:
                     data = self.__sock.recv(d2dConstants.MTU)
-                    return data, True
+                    return data
 
                 except socket.timeout:
                     if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
-                        return None, True
+                        return None
 
                 except socket.error:
-                    return None, False
+                    self.close()
+                    return None
 
-            return None, False
 
 
         def send(self, msg):
@@ -248,6 +252,10 @@ class tcpRandomPortListener():
 
             for chn in chn_msg:
                 self.__sock.sendall(chn)
+
+
+        def isConnected(self):
+            return self.__open
 
 
         @property
@@ -262,6 +270,7 @@ class tcpRandomPortListener():
 
 
         def close(self):
+            self.__open = False
             self.__sock.close()
 
 
@@ -271,38 +280,11 @@ class tcpRandomPortListener():
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__sock.bind(('', 0))
         self.__sock.settimeout(0.1)
+        self.__sock.listen(d2dConstants.MAX_LISTEN_TCP_SOKETS)
 
 
     def __del__(self):
         self.close()
-
-
-    def read(self, timeout=-1):
-
-        current_epoch_time = int(time.time())
-        while self.__open:
-            try:
-                data, (ip, port) = self.__sock.recvfrom(d2dConstants.MTU)
-                return data, ip, port
-
-            except socket.timeout:
-                if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
-                    return None, None, None
-
-            except socket.error:
-                return None, None, None
-
-        return None, None, None
-
-
-    def send(self, ip, port, msg):
-        if isinstance(msg, str):
-            msg = msg.encode()
-
-        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
-
-        for chn in chn_msg:
-            self.__sock.sendto(chn, (ip, port))
 
 
     @property
@@ -316,9 +298,116 @@ class tcpRandomPortListener():
         return self.__sock.getsockname()[1]
 
 
-    def waitConnection(self):
-        connection, (ip, port) = self.__sock.accept()
-        return tcpRandomPortListener.connection(connection, ip, port)
+    def waitConnection(self, timeout=-1):
+
+        current_epoch_time = int(time.time())
+        while self.__open:
+            try:
+                connection, (ip, port) = self.__sock.accept()
+                return tcpRandomPortListener.connection(connection, ip, port)
+
+
+            except socket.timeout:
+                if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
+                    return None
+
+            except socket.error:
+                return None
+
+
+    def close(self):
+        self.__open = False
+        self.__sock.close()
+
+
+class tcpClient():
+    def __init__(self, ip, port):
+        self.__open = False
+        self.__remote_ip = ip
+        self.__remote_port = port
+        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.__sock.settimeout(0.1)
+
+
+    def __del__(self):
+        self.close()
+
+
+    def __connect(self):
+        if not self.__open:
+            try:
+                self.__sock.connect((self.__remote_ip, self.__remote_port))
+                self.__open = True
+
+            except:
+                pass
+
+        return self.__open
+
+
+    def read(self, timeout=-1):
+
+        if self.__connect():
+            current_epoch_time = int(time.time())
+            while self.__open:
+                try:
+                    data = self.__sock.recv(d2dConstants.MTU)
+                    return data
+
+                except socket.timeout:
+                    if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
+                        return None
+
+                except socket.error:
+                    self.close()
+                    if not self.__connect():
+                        return None
+
+        return None
+
+
+    def send(self, msg):
+        if self.__connect():
+
+            if isinstance(msg, str):
+                msg = msg.encode()
+
+            chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+            while True:
+
+                try:
+                    for chn in chn_msg:
+                        self.__sock.sendall(chn)
+
+                    return True
+
+                except:
+                    self.close()
+                    if not self.__connect():
+                        return False
+
+        return False
+
+
+    @property
+    def local_ip(self):
+        hostname = socket.gethostname()
+        return socket.gethostbyname(hostname)
+
+
+    @property
+    def local_port(self):
+        return self.__sock.getsockname()[1]
+
+
+    @property
+    def remote_ip(self):
+        return self.__remote_ip
+
+
+    @property
+    def remote_port(self):
+        return self.__remote_port
 
 
     def close(self):
@@ -374,7 +463,7 @@ class d2dCommand():
                 self.__socket = udpClient(ip, port)
 
             elif protocol == d2dConstants.commandProtocol.JSON_TCP:
-                self.__socket = udpClient(ip, port)
+                self.__socket = tcpClient(ip, port)
 
             else:
                 self.__socket = None
@@ -435,17 +524,22 @@ class d2dCommand():
             self.__socket.send(json.dumps(args, indent=1))
             response = ""
             while True:
-                read_response = self.__socket.read(timeout).decode()
+                read_response = self.__socket.read(timeout)
                 if not read_response:
                     break
-                elif read_response[-1] == "}":
-                    response += read_response
-                    break
                 else:
-                    response += read_response
+                    read_response = read_response.decode()
+                    if read_response[-1] == "}":
+                        response += read_response
+                        break
+                    else:
+                        response += read_response
 
         except:
             pass
+
+        if response == "":
+            response = d2dConstants.commandErrorMsg.TIMEOUT_ERROR
 
         return d2dCommandResponse(response) 
 
@@ -993,6 +1087,46 @@ class d2d():
                 pass
 
 
+    def __tcpListenerThread(socket, service_container, command_callback, input_params, output_params):
+
+        mutex = threading.Lock()
+        threads_list = []
+        while service_container.run:
+
+            # Wait connection
+            connection = socket.waitConnection()
+            if not connection:
+                break
+
+            # Launch thread
+            thread = threading.Thread(target=d2d.__tcpConnectionThread, daemon=True, args=[connection, service_container, command_callback, input_params, output_params, mutex])
+            thread.start()
+
+            threads_list.append(thread)
+
+        # Wait connection threads
+        socket.close()
+        for thread in threads_list:
+            thread.join()
+
+
+    def __tcpConnectionThread(connection, service_container, command_callback, input_params, output_params, mutex):
+
+        while service_container.run:
+
+            request = connection.read()
+            if not request:
+                break
+
+            with mutex:
+                response = d2d.__jsonCommandRequest(request, service_container, command_callback, input_params, output_params)
+                try:
+                    connection.send(response)
+
+                except:
+                    pass
+
+
     def __publish(self, path, payload=None):
         if not payload:
             self.__client.publish(path, payload=None, qos=1, retain=True)
@@ -1063,9 +1197,9 @@ class d2d():
             self.__threads.append(thread)
 
         elif protocol == d2dConstants.commandProtocol.JSON_TCP:
-            listen_socket = udpRandomPortListener()
+            listen_socket = tcpRandomPortListener()
             self.__command_sockets.append(listen_socket)
-            thread = threading.Thread(target=d2d.__udpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
+            thread = threading.Thread(target=d2d.__tcpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
             thread.start()
             self.__threads.append(thread)
 
