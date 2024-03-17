@@ -851,8 +851,12 @@ class d2d():
         if not broker_ip:
             return False
 
+        version_array = paho.mqtt.__version__.split(".")
+        if version_array[0] == "1":
+            client = paho.mqtt.client.Client()
+        else:
+            client = paho.mqtt.client.Client(paho.mqtt.client.CallbackAPIVersion.VERSION1)
 
-        client = paho.mqtt.client.Client()
         try:
             client.will_set(self.__local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
             client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
