@@ -28,7 +28,7 @@ import ServiceDiscovery
 import weakref
 
 
-version = "0.3.2"
+version = "0.3.3"
 
 
 class d2dConstants():
