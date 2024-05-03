@@ -34,6 +34,7 @@ PACKAGES+=(vim)
 PACKAGES+=(tzdata)
 
 PACKAGES+=(openssh-server)
+PACKAGES+=(ssh-askpass)
 
 PACKAGES+=(mosquitto)
 
