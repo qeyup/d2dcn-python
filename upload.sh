@@ -9,4 +9,4 @@
 #
 
 # upload to pypi
-twine upload dist/*
+twine upload --config-file .ssh/pypirc dist/*

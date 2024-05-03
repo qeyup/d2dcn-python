@@ -26,9 +26,10 @@ import re
 import paho.mqtt.client
 import ServiceDiscovery
 import weakref
+import pyroute2
 
 
-version = "0.3.3"
+version = "0.4.1"
 
 
 class d2dConstants():
@@ -128,12 +129,6 @@ class udpRandomPortListener():
 
         for chn in chn_msg:
             self.__sock.sendto(chn, (ip, port))
-
-
-    @property
-    def ip(self):
-        hostname = socket.gethostname()
-        return socket.gethostbyname(hostname)
 
 
     @property
@@ -259,12 +254,6 @@ class tcpRandomPortListener():
 
 
         @property
-        def ip(self):
-            hostname = socket.gethostname()
-            return socket.gethostbyname(hostname)
-
-
-        @property
         def port(self):
             return self.__sock.getsockname()[1]
 
@@ -285,12 +274,6 @@ class tcpRandomPortListener():
 
     def __del__(self):
         self.close()
-
-
-    @property
-    def ip(self):
-        hostname = socket.gethostname()
-        return socket.gethostbyname(hostname)
 
 
     @property
@@ -622,6 +605,7 @@ class d2d():
         self.__subscriptions = []
         self.__publications = {}
         self.__client = None
+        self.__broker_ip = None
 
         self.__checkBrokerConnection()
 
@@ -846,9 +830,9 @@ class d2d():
 
 
         discover_client = ServiceDiscovery.client()
-        broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME,
+        self.__broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME,
             timeout=self.__broker_discover_timeout, retry=self.__broker_discover_retry)
-        if not broker_ip:
+        if not self.__broker_ip:
             return False
 
         version_array = paho.mqtt.__version__.split(".")
@@ -859,7 +843,7 @@ class d2d():
 
         try:
             client.will_set(self.__local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
-            client.connect(broker_ip, d2dConstants.MQTT_BROKER_PORT)
+            client.connect(self.__broker_ip, d2dConstants.MQTT_BROKER_PORT)
         except:
             return False
 
@@ -1168,6 +1152,14 @@ class d2d():
         return True
 
 
+    def __getOwnIP(self, dst='127.0.0.1'):
+        ipr = pyroute2.IPRoute().route('get', dst=dst)
+        if len(ipr) > 0:
+            return ipr[0].get_attr('RTA_PREFSRC')
+        else:
+            return "127.0.0.1"
+
+
     def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5, protocol=d2dConstants.commandProtocol.JSON_UDP)-> bool:
 
         if not cmdCallback:
@@ -1216,7 +1208,7 @@ class d2d():
 
         self.__service_container[name].map = {}
         self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = protocol
-        self.__service_container[name].map[d2dConstants.commandField.IP] = listen_socket.ip
+        self.__service_container[name].map[d2dConstants.commandField.IP] = self.__getOwnIP(self.__broker_ip)
         self.__service_container[name].map[d2dConstants.commandField.PORT] = listen_socket.port
         self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
         self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
