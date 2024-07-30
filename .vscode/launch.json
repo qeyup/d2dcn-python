@@ -12,6 +12,22 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": "${input:inPrompt}"
+        },
+        {
+            "name": "publish command example",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/example/command_publisher.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "Command call example",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/example/command_call.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ],
     "inputs": [
