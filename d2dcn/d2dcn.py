@@ -29,7 +29,7 @@ import weakref
 import pyroute2
 
 
-version = "0.4.1"
+version = "0.4.2"
 
 
 class d2dConstants():
@@ -79,10 +79,15 @@ class d2dConstants():
         OPTIONAL = "optional"
 
     class valueTypes():
+        ARRAY = "array"
         BOOL = "bool"
+        BOOL_ARRAY = "bool_" + ARRAY
         INT = "int"
+        INT_ARRAY = "int_" + ARRAY
         STRING = "string"
+        STRING_ARRAY = "string_" + ARRAY
         FLOAT = "float"
+        FLOAT_ARRAY = "float_" + ARRAY
 
 
 class container():
@@ -505,21 +510,21 @@ class d2dCommand():
         try:
             response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
-            response = self.__socket.read(timeout)
-            if response:
-                response = response.decode()
+            socket_response = self.__socket.read(timeout)
+            if socket_response:
+                response = socket_response.decode()
                 while response.startswith("{") and not response.endswith("}"):
                     read_response = self.__socket.read(timeout)
                     if read_response:
                         response += read_response.decode()
                     else:
                         break
+            else:
+                response = d2dConstants.commandErrorMsg.TIMEOUT_ERROR
 
         except:
             pass
 
-        if not response or response == "":
-            response = d2dConstants.commandErrorMsg.TIMEOUT_ERROR
 
         return d2dCommandResponse(response) 
 
@@ -590,6 +595,8 @@ class d2d():
         self.__local_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/"
         self.__callback_mutex = threading.RLock()
         self.__registered_mutex = threading.RLock()
+        self.__command_wait = threading.Lock()
+        self.__info_wait = threading.Lock()
         self.__command_update_callback = None
         self.__info_update_callback = None
         self.__command_remove_callback = None
@@ -775,6 +782,9 @@ class d2d():
                     if self.__command_update_callback:
                         self.__command_update_callback(command_object)
 
+                if self.__command_wait.locked():
+                    self.__command_wait.release()
+
             elif mode == d2dConstants.INFO_LEVEL:
                 try:
                     value = command_info[d2dConstants.infoField.VALUE]
@@ -790,6 +800,9 @@ class d2d():
                 with self.__callback_mutex:
                     if self.__info_update_callback:
                         self.__info_update_callback(info_object)
+
+                if self.__info_wait.locked():
+                    self.__info_wait.release()
 
         else:
             removed_item = None
@@ -953,7 +966,7 @@ class d2d():
         return regex_path
 
 
-    def __getType(self, data) -> str:
+    def __getType(data) -> str:
 
         if isinstance(data, float):
             return d2dConstants.valueTypes.FLOAT
@@ -966,6 +979,37 @@ class d2d():
 
         elif isinstance(data, str):
             return d2dConstants.valueTypes.STRING
+
+        elif isinstance(data, list):
+
+            detected_type = ""
+            for item in data:
+                if detected_type == "":
+                    detected_type = d2d.__getType(item)
+                    if detected_type == "":
+                        return ""
+                else:
+                    aux = d2d.__getType(item)
+                    if aux != detected_type:
+                        return ""
+
+            if len(data) == 0:
+                return d2dConstants.valueTypes.ARRAY
+            
+            elif detected_type == d2dConstants.valueTypes.FLOAT:
+                return d2dConstants.valueTypes.FLOAT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.BOOL:
+                return d2dConstants.valueTypes.BOOL_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.INT:
+                return d2dConstants.valueTypes.INT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.STRING:
+                return d2dConstants.valueTypes.STRING_ARRAY
+            
+            else:
+                return ""
 
         else:
             return ""
@@ -986,19 +1030,16 @@ class d2d():
 
 
     def __checkFieldType(field, field_type):
-        if field_type == d2dConstants.valueTypes.STRING:
-            return isinstance(field, str)
+        detected_type = d2d.__getType(field)
 
-        elif field_type == d2dConstants.valueTypes.BOOL:
-            return isinstance(field, bool)
+        if detected_type == field_type:
+            return True
 
-        elif field_type == d2dConstants.valueTypes.INT:
-            return isinstance(field, int)
-
-        elif field_type == d2dConstants.valueTypes.FLOAT:
-            return isinstance(field, float)
-
-        return False
+        elif detected_type == d2dConstants.valueTypes.ARRAY and d2dConstants.valueTypes.ARRAY in field_type:
+            return True
+        
+        else:
+            return False
 
 
     def __checkInOutField(data_dict, prototipe_dict) -> bool:
@@ -1028,7 +1069,6 @@ class d2d():
 
             except:
                 return d2dConstants.commandErrorMsg.BAD_INPUT
-
 
 
             # Ignore if disable
@@ -1245,7 +1285,7 @@ class d2d():
         return True
 
 
-    def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="") -> list:
+    def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="", wait=0) -> list:
 
         mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
 
@@ -1254,6 +1294,23 @@ class d2d():
             for mqtt_path in self.__registered_commands:
                 if re.search(mqtt_pattern_path, mqtt_path):
                     commands.append(self.__registered_commands[mqtt_path])
+
+        # Wait at least one command
+        while len(commands) == 0 and wait != 0:
+
+            if mqtt_pattern_path not in self.__subscribe_patterns:
+                self.subscribeComands(mac, service, category, command)
+
+            self.__command_wait.acquire(blocking=False)
+
+            if not self.__command_wait.acquire(blocking=True, timeout=wait):
+                break
+
+            with self.__registered_mutex:
+                for mqtt_path in self.__registered_commands:
+                    if re.search(mqtt_pattern_path, mqtt_path):
+                        commands.append(self.__registered_commands[mqtt_path])
+
 
         return commands
 
@@ -1274,7 +1331,7 @@ class d2d():
         return True
 
 
-    def getSubscribedInfo(self, mac:str="", service:str="", category="", name:str="") -> dict:
+    def getSubscribedInfo(self, mac:str="", service:str="", category="", name:str="", wait=0) -> dict:
         mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
         info = []
@@ -1282,6 +1339,24 @@ class d2d():
             for mqtt_path in self.__registered_info:
                 if re.search(mqtt_pattern_path, mqtt_path):
                     info.append(self.__registered_info[mqtt_path])
+
+
+        # Wait at least one command
+        while len(info) == 0 and wait != 0:
+
+            if mqtt_pattern_path not in self.__subscribe_patterns:
+                self.subscribeComands(mac, service, category, name)
+
+            self.__info_wait.acquire(blocking=False)
+
+            if not self.__info_wait.acquire(blocking=True, timeout=wait):
+                break
+
+            with self.__registered_mutex:
+                for mqtt_path in self.__registered_info:
+                    if re.search(mqtt_pattern_path, mqtt_path):
+                        info.append(self.__registered_info[mqtt_path])
+
 
         return info
 
@@ -1298,7 +1373,7 @@ class d2d():
             return False
         self.__info_used_paths[name] = mqtt_path
 
-        value_type = self.__getType(value)
+        value_type = d2d.__getType(value)
         if value_type == "":
             return False
 
@@ -1318,3 +1393,8 @@ class d2d():
                     self.__publish(path)
 
             self.__unused_received_paths.clear()
+
+
+    def waitThreads(self):
+        for thread in self.__threads:
+            thread.join()
