@@ -18,19 +18,17 @@ def command_call(args):
 
 def main():
 
-    d2d_object = d2dcn.d2d()
+    d2d_object = d2dcn.d2d(service="call_command_example")
 
-    result = d2d_object.subscribeComands(command="command_example1")
-    print("Subscribe example command...", "Success" if result else "Failure")
-
-    found_commands = d2d_object.getAvailableComands()
+    found_commands = d2d_object.getAvailableComands(wait=5)
     print("Found", len(found_commands), "commands")
 
     for command_object in found_commands:
         params = {}
         params["command_arg1"] = True
         result = command_object.call(params)
-        print("Command call result: ", result)
+        print("Command call result: ", result.success)
+        print(result if result.success else result.error)
 
 
 

@@ -11,13 +11,16 @@ RESPONSE_ARG1 = "response_arg1"
 
 
 def command_call(args):
-    print("comand call recived")
-    return []
+    print("comand call recived", args[COMMAND_ARG1])
+
+    response = {}
+    response[RESPONSE_ARG1] = "Recived!"
+    return response
 
 
 def main():
 
-    d2d_object = d2dcn.d2d()
+    d2d_object = d2dcn.d2d(service="publish_command_example")
 
     command_args = {}
     command_args[COMMAND_ARG1] = {}
