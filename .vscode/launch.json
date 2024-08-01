@@ -14,10 +14,10 @@
             "args": "${input:inPrompt}"
         },
         {
-            "name": "publish command example",
+            "name": "Command publish example",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/example/command_publisher.py",
+            "program": "${workspaceFolder}/example/command_publish.py",
             "console": "integratedTerminal",
             "justMyCode": true
         },
