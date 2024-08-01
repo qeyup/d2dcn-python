@@ -11,4 +11,5 @@ services:
       - DISPLAY=:0
     stdin_open: true 
     tty: true
+    network_mode: "bridge"
     privileged: true
