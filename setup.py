@@ -13,7 +13,8 @@ if __name__ == '__main__':
         install_requires = [
             "psutil",
             "paho-mqtt",
-            "ServiceDiscovery"
+            "ServiceDiscovery",
+            "pyroute2"
         ],
         author = "Javier Moreno Garcia",
         author_email = "jgmore@gmail.com",
