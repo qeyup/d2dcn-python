@@ -79,10 +79,15 @@ class d2dConstants():
         OPTIONAL = "optional"
 
     class valueTypes():
+        ARRAY = "array"
         BOOL = "bool"
+        BOOL_ARRAY = "bool_" + ARRAY
         INT = "int"
+        INT_ARRAY = "int_" + ARRAY
         STRING = "string"
+        STRING_ARRAY = "string_" + ARRAY
         FLOAT = "float"
+        FLOAT_ARRAY = "float_" + ARRAY
 
 
 class container():
@@ -961,7 +966,7 @@ class d2d():
         return regex_path
 
 
-    def __getType(self, data) -> str:
+    def __getType(data) -> str:
 
         if isinstance(data, float):
             return d2dConstants.valueTypes.FLOAT
@@ -974,6 +979,37 @@ class d2d():
 
         elif isinstance(data, str):
             return d2dConstants.valueTypes.STRING
+
+        elif isinstance(data, list):
+
+            detected_type = ""
+            for item in data:
+                if detected_type == "":
+                    detected_type = d2d.__getType(item)
+                    if detected_type == "":
+                        return ""
+                else:
+                    aux = d2d.__getType(item)
+                    if aux != detected_type:
+                        return ""
+
+            if len(data) == 0:
+                return d2dConstants.valueTypes.ARRAY
+            
+            elif detected_type == d2dConstants.valueTypes.FLOAT:
+                return d2dConstants.valueTypes.FLOAT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.BOOL:
+                return d2dConstants.valueTypes.BOOL_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.INT:
+                return d2dConstants.valueTypes.INT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.STRING:
+                return d2dConstants.valueTypes.STRING_ARRAY
+            
+            else:
+                return ""
 
         else:
             return ""
@@ -994,19 +1030,16 @@ class d2d():
 
 
     def __checkFieldType(field, field_type):
-        if field_type == d2dConstants.valueTypes.STRING:
-            return isinstance(field, str)
+        detected_type = d2d.__getType(field)
 
-        elif field_type == d2dConstants.valueTypes.BOOL:
-            return isinstance(field, bool)
+        if detected_type == field_type:
+            return True
 
-        elif field_type == d2dConstants.valueTypes.INT:
-            return isinstance(field, int)
-
-        elif field_type == d2dConstants.valueTypes.FLOAT:
-            return isinstance(field, float)
-
-        return False
+        elif detected_type == d2dConstants.valueTypes.ARRAY and d2dConstants.valueTypes.ARRAY in field_type:
+            return True
+        
+        else:
+            return False
 
 
     def __checkInOutField(data_dict, prototipe_dict) -> bool:
@@ -1340,7 +1373,7 @@ class d2d():
             return False
         self.__info_used_paths[name] = mqtt_path
 
-        value_type = self.__getType(value)
+        value_type = d2d.__getType(value)
         if value_type == "":
             return False
 
