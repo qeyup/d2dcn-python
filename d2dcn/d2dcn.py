@@ -29,7 +29,7 @@ import weakref
 import pyroute2
 
 
-version = "0.4.2"
+version = "0.4.3"
 
 
 class d2dConstants():
