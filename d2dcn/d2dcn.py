@@ -26,10 +26,12 @@ import re
 import paho.mqtt.client
 import ServiceDiscovery
 import weakref
-from pyroute2 import IPRoute
+
+if os.name != 'nt':
+    from pyroute2 import IPRoute
 
 
-version = "0.4.4"
+version = "0.4.5"
 
 
 class d2dConstants():
@@ -1193,11 +1195,16 @@ class d2d():
 
 
     def __getOwnIP(self, dst='127.0.0.1'):
-        ipr = IPRoute().route('get', dst=dst)
-        if len(ipr) > 0:
-            return ipr[0].get_attr('RTA_PREFSRC')
+
+        if os.name != 'nt':
+            ipr = IPRoute().route('get', dst=dst)
+            if len(ipr) > 0:
+                return ipr[0].get_attr('RTA_PREFSRC')
+            else:
+                return "127.0.0.1"
+
         else:
-            return "127.0.0.1"
+            return ""
 
 
     def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5, protocol=d2dConstants.commandProtocol.JSON_UDP)-> bool:
