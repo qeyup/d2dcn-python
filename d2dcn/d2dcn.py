@@ -26,10 +26,10 @@ import re
 import paho.mqtt.client
 import ServiceDiscovery
 import weakref
-import pyroute2
+from pyroute2 import IPRoute
 
 
-version = "0.4.3"
+version = "0.4.4"
 
 
 class d2dConstants():
@@ -1193,7 +1193,7 @@ class d2d():
 
 
     def __getOwnIP(self, dst='127.0.0.1'):
-        ipr = pyroute2.IPRoute().route('get', dst=dst)
+        ipr = IPRoute().route('get', dst=dst)
         if len(ipr) > 0:
             return ipr[0].get_attr('RTA_PREFSRC')
         else:
