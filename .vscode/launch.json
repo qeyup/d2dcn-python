@@ -28,6 +28,22 @@
             "program": "${workspaceFolder}/example/command_call.py",
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "info publish example",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/example/info_publish.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
+            "name": "info read example",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/example/info_read.py",
+            "console": "integratedTerminal",
+            "justMyCode": true
         }
     ],
     "inputs": [
