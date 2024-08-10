@@ -31,13 +31,17 @@ if os.name != 'nt':
     from pyroute2 import IPRoute
 
 
-version = "0.4.5"
+version = "0.5.0"
 
 
 class d2dConstants():
     MQTT_SERVICE_NAME = "MQTT_BROKER"
+    BROKER_SERVICE_NAME = "D2D_BROKER"
     MQTT_BROKER_PORT = 1883
+    BROKER_PORT = 18832
+    CLIENT_DISCOVER_WAIT = 5
     MTU = 4096
+    END_OF_TX = b'\xFF'
     MAX_LISTEN_TCP_SOKETS = 0
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
@@ -215,7 +219,7 @@ class udpClient():
         self.__sock.close()
 
 
-class tcpRandomPortListener():
+class tcpListener():
 
 
     class connection():
@@ -234,7 +238,14 @@ class tcpRandomPortListener():
             while self.__open:
                 try:
                     data = self.__sock.recv(d2dConstants.MTU)
-                    return data
+
+                    if len(data) > 0:
+                        return data
+
+                    else:
+                        self.close()
+                        self.__open = False
+                        return None
 
                 except socket.timeout:
                     if timeout >= 0 and int(time.time()) - current_epoch_time >= timeout:
@@ -242,8 +253,8 @@ class tcpRandomPortListener():
 
                 except socket.error:
                     self.close()
+                    self.__open = False
                     return None
-
 
 
         def send(self, msg):
@@ -252,8 +263,14 @@ class tcpRandomPortListener():
 
             chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
 
-            for chn in chn_msg:
-                self.__sock.sendall(chn)
+            try:
+                for chn in chn_msg:
+                    self.__sock.sendall(chn)
+
+            except:
+                return False
+
+            return True
 
 
         def isConnected(self):
@@ -265,18 +282,29 @@ class tcpRandomPortListener():
             return self.__sock.getsockname()[1]
 
 
+        @property
+        def clientIp(self):
+            return self.__ip
+
+
+        @property
+        def clientPort(self):
+            return self.__port
+
+
         def close(self):
             self.__open = False
             self.__sock.close()
 
 
-    def __init__(self):
+    def __init__(self, port=0, max_connections=d2dConstants.MAX_LISTEN_TCP_SOKETS):
         super().__init__()
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.__sock.bind(('', 0))
+        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.__sock.bind(('', port))
         self.__sock.settimeout(0.1)
-        self.__sock.listen(d2dConstants.MAX_LISTEN_TCP_SOKETS)
+        self.__sock.listen(max_connections)
 
 
     def __del__(self):
@@ -294,7 +322,7 @@ class tcpRandomPortListener():
         while self.__open:
             try:
                 connection, (ip, port) = self.__sock.accept()
-                return tcpRandomPortListener.connection(connection, ip, port)
+                return tcpListener.connection(connection, ip, port)
 
 
             except socket.timeout:
@@ -330,7 +358,7 @@ class tcpClient():
                 self.__open = True
 
             except:
-                pass
+                self.__open = False
 
         return self.__open
 
@@ -403,6 +431,356 @@ class tcpClient():
     def close(self):
         self.__open = False
         self.__sock.close()
+
+
+class d2dBroker():
+
+    def __init__(self, mac, service, master=True):
+
+        self.__discovery_daemon = ServiceDiscovery.daemon(d2dConstants.BROKER_SERVICE_NAME) if master else None
+        self.__discovery_client = ServiceDiscovery.client()
+        self.__master_listener = tcpListener(d2dConstants.BROKER_PORT)
+        self.__client = None
+        self.__master_clients = []
+        self.__broker_data = {}
+        self.__broker_own_topics = []
+        self.__on_new_topic = None
+        self.__on_update_topic = None
+        self.__on_remove_topic = None
+        self.__mutex = threading.RLock()
+        self.__start_mutex = threading.Lock()
+        self.__start_mutex.acquire()
+
+        # Launch broker master
+        if master:
+            self.__discovery_daemon.run(True)
+            threading.Thread(target=d2dBroker.__masterDaemonThread, daemon=True, args=[weakref.ref(self)]).start()
+
+        # Launch broker client
+        threading.Thread(target=d2dBroker.__clientDaemonThread, daemon=True, args=[weakref.ref(self)]).start()
+
+        # Wait first conection
+        self.__start_mutex.acquire()
+
+
+    def __del__(self):
+
+        self.__master_listener.close()
+        with self.__mutex:
+            if self.__client:
+                self.__client.close()
+
+
+    def __readFrames(connection):
+
+        read_buffer = bytearray()
+        while True:
+            input_data = connection.read()
+            if not input_data or len(input_data) == 0:
+                return None
+
+            read_buffer += input_data
+
+            last_byte = bytes([read_buffer[-1]])
+            if last_byte == d2dConstants.END_OF_TX:
+                break
+            else:
+                print("not all")
+
+        return read_buffer[:-1].split(d2dConstants.END_OF_TX)
+
+
+    def __masterDaemonThread(weak_self):
+        while True:
+            shared_self = weak_self()
+            if not shared_self:
+                break
+
+            # wait new client connection
+            connection = shared_self.__master_listener.waitConnection()
+            threading.Thread(target=d2dBroker.__connectionThread, daemon=True, args=[weak_self, connection]).start()
+
+
+    def __connectionThread(weak_self, connection):
+
+        # Check valid connection
+        if not connection:
+            return
+
+
+        # Get instance
+        shared_self = weak_self()
+        if not shared_self:
+            return
+
+
+        # Send current DB
+        with shared_self.__mutex:
+            print("New client", connection.clientIp, "send", len(shared_self.__broker_data))
+
+            # Send all current info to new client
+            all_db_send = True
+
+            for topic in shared_self.__broker_data:
+                master_topic = True if topic in shared_self.__broker_own_topics else False
+                msg = json.dumps([topic, shared_self.__broker_data[topic], master_topic])
+
+                if not connection.send(bytearray(msg, encoding='utf8') + d2dConstants.END_OF_TX):
+                    print("Client error")
+                    all_db_send = False
+                    break
+
+                print("--- >", topic, connection.clientIp)
+
+
+            # Start listen thread
+            if all_db_send:
+                shared_self.__master_clients.append(connection)
+
+            else:
+                connection.close()
+                return
+
+
+        # Read loop
+        clients_topics = []
+        while connection.isConnected():
+            shared_self = weak_self()
+            if not shared_self:
+                break
+
+            # Wait client incoming
+            input_frames = d2dBroker.__readFrames(connection)
+            if not input_frames:
+                break
+
+            clients_with_errors = []
+            for msg in input_frames:
+
+                # Get message topic:
+                try:
+                    input_dict = json.loads(msg)
+                    topic = input_dict[0]
+                    if topic not in clients_topics:
+                        clients_topics.append(topic)
+
+                except:
+                    print("Message ignored")
+                    continue
+
+                # Propagate to other clients (included sender client and own client)
+                with shared_self.__mutex:
+                    for client in shared_self.__master_clients:
+                        if not client.send(msg + d2dConstants.END_OF_TX):
+                            clients_with_errors.append(client)
+                            print("Client error 2")
+                            continue
+
+
+            # Remove clients with errors
+            with shared_self.__mutex:
+                for client in clients_with_errors:
+                    client.close()
+
+
+        # Notify client discontion
+        with shared_self.__mutex:
+            shared_self.__master_clients.remove(connection)
+
+            for topic in clients_topics:
+                if topic in shared_self.__broker_data:
+                    del shared_self.__broker_data[topic]
+
+                    for client in shared_self.__master_clients:
+                        raw = json.dumps([topic])
+                        if not client.send(bytearray(raw, encoding='utf8') + d2dConstants.END_OF_TX):
+                            print("Client error")
+
+        shared_self.__printDB()
+
+
+    def __clientDaemonThread(weak_self):
+        while True:
+            shared_self = weak_self()
+            if not shared_self:
+                break
+
+
+            # Discover master
+            master_ip = shared_self.__discovery_client.getServiceIP(d2dConstants.BROKER_SERVICE_NAME, timeout=d2dConstants.CLIENT_DISCOVER_WAIT)
+            print("Found broker", master_ip)
+            if master_ip != "":
+
+                # Connect to master
+                with shared_self.__mutex:
+                    shared_self.__client = tcpClient(master_ip, d2dConstants.BROKER_PORT)
+                    if shared_self.__start_mutex.locked():
+                        shared_self.__start_mutex.release()
+
+                broker_topics = []
+
+                # Read loop
+                print("Start client")
+                while True:
+
+                    input_frames = d2dBroker.__readFrames(shared_self.__client)
+                    if not input_frames:
+                        break
+
+                    for msg in input_frames:
+
+                        # Get broker topic
+                        try:
+                            input_dict = json.loads(msg)
+                            topic = input_dict[0]
+                            isMaster = True if len(input_dict) >= 3 and bool(input_dict[2]) else False
+                            if isMaster and topic not in broker_topics:
+                                broker_topics.append(topic)
+
+                        except:
+                            continue
+
+
+                        # Process incoming
+                        d2dBroker.__incomingMsg(shared_self, msg)
+
+
+                # Remove broker ip from list
+                print("Broker disconnection", shared_self.__client.remote_ip)
+                with shared_self.__mutex:
+                    for topic in broker_topics:
+                        if topic in shared_self.__broker_data:
+                            del shared_self.__broker_data[topic]
+
+                shared_self.__printDB()
+
+    def __printDB(self):
+
+        with self.__mutex:
+            print("----------------")
+            for topic in self.__broker_data:
+                print("#", topic, self.__broker_data[topic].replace("\n", "").replace(" ", ""))
+            print("----------------")
+
+
+    def __incomingMsg(shared_self, input_data):
+
+        try:
+            input_dict = json.loads(input_data)
+
+            topic = input_dict[0]
+
+            print("<---", topic, input_data)
+
+            with shared_self.__mutex:
+
+                if len(input_dict) == 1:
+
+                    if topic in shared_self.__broker_data:
+
+
+                        # Remove topic
+                        del shared_self.__broker_data[topic]
+
+                        print("[Topic removed ", topic, "]")
+                        if shared_self.__on_update_topic:
+                            shared_self.__on_remove_topic(topic)
+
+                        shared_self.__printDB()
+
+
+                else:
+                    data = json.loads(input_dict[1])
+                    if isinstance(data, dict):
+
+                        if topic in shared_self.__broker_data:
+
+                            # Update topic
+                            shared_self.__broker_data[topic] = input_dict[1]
+
+                            print("[Topic updated", topic, "]")
+                            if shared_self.__on_update_topic:
+                                shared_self.__on_update_topic(topic, data)
+
+                            shared_self.__printDB()
+
+
+                        else:
+
+                            # Add new topic
+                            shared_self.__broker_data[topic] = input_dict[1]
+
+                            print("[Topic new", topic, "]")
+                            if shared_self.__on_update_topic:
+                                shared_self.__on_new_topic(topic, data)
+
+
+                            shared_self.__printDB()
+
+        except:
+            print("Error!", input_data)
+            pass
+
+
+    def publishData(self, topic, msg=None):
+        with self.__mutex:
+            if self.__client:
+                topic = topic.replace("publish_command_example/command/example/command_example1", "")
+                if msg:
+                    msg="{}"
+                    raw = json.dumps([topic, msg, self.__discovery_daemon.isMaster()])
+
+                    if topic not in self.__broker_own_topics:
+                        self.__broker_own_topics.append(topic)
+
+                else:
+                    raw = json.dumps([topic])
+
+                    if topic in self.__broker_own_topics:
+                        self.__broker_own_topics.remove(topic)
+
+                return self.__client.send(bytearray(raw, encoding="utf8") + d2dConstants.END_OF_TX)
+
+        return False
+
+
+    @property
+    def onNewTopic(self):
+        with self.__mutex:
+            return self.__on_new_topic
+
+    @onNewTopic.setter
+    def onNewTopic(self, callback):
+        with self.__mutex:
+            self.__on_new_topic = callback
+
+
+    @property
+    def onUpdateTopic(self):
+        with self.__mutex:
+            return self.__on_update_topic
+
+
+    @onUpdateTopic.setter
+    def onUpdateTopic(self, callback):
+        with self.__mutex:
+            self.__on_update_topic = callback
+
+
+    @property
+    def onRemoveTopic(self):
+        with self.__mutex:
+            return self.__on_remove_topic
+
+
+    @onRemoveTopic.setter
+    def onRemoveTopic(self, callback):
+        with self.__mutex:
+            self.__on_remove_topic = callback
+
+
+class d2dInfoReport():
+    pass
 
 
 class d2dCommandResponse(dict):
@@ -578,7 +956,7 @@ class d2dInfo():
 
 class d2d():
 
-    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1, service=None):
+    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1, service=None, master=True):
         self.__mac = hex(uuid.getnode()).replace("0x", "")
 
         if service:
@@ -616,7 +994,7 @@ class d2d():
         self.__client = None
         self.__broker_ip = None
 
-        self.__checkBrokerConnection()
+        self.__broker = d2dBroker(self.__mac, self.__service, master)
 
 
     def __del__(self):
@@ -830,51 +1208,6 @@ class d2d():
                             self.__info_remove_callback(removed_item)
 
 
-    def __checkBrokerConnection(self) -> bool:
-
-        if self.__client:
-            if self.__client.is_connected():
-                return True
-            else:
-                for interval in range(50):
-                    time.sleep(0.05)
-                    if self.__client.is_connected():
-                        return True
-
-                return self.__client.is_connected()
-
-
-        discover_client = ServiceDiscovery.client()
-        self.__broker_ip = discover_client.getServiceIP(d2dConstants.MQTT_SERVICE_NAME,
-            timeout=self.__broker_discover_timeout, retry=self.__broker_discover_retry)
-        if not self.__broker_ip:
-            return False
-
-        version_array = paho.mqtt.__version__.split(".")
-        if version_array[0] == "1":
-            client = paho.mqtt.client.Client()
-        else:
-            client = paho.mqtt.client.Client(paho.mqtt.client.CallbackAPIVersion.VERSION1)
-
-        try:
-            client.will_set(self.__local_path + d2dConstants.STATE, payload=d2dConstants.state.OFFLINE, qos=1, retain=True)
-            client.connect(self.__broker_ip, d2dConstants.MQTT_BROKER_PORT)
-        except:
-            return False
-
-        client.on_message = lambda client, weak_self, message : d2d.__brokerMessageReceived(message, weak_self)
-        client.on_connect = lambda client, weak_self, flags, rc : d2d.__onConnect(weak_self)
-        client.user_data_set(weakref.ref(self))
-        client.loop_start()
-
-        self.__client = client
-
-        self.__subscribe(self.__local_path + "#")
-        self.__subscribe(d2dConstants.MQTT_PREFIX + "/+/+/" + d2dConstants.STATE)
-
-        return True
-
-
     def __onConnect(weak_self):
         self = weak_self()
         if not self:
@@ -883,13 +1216,15 @@ class d2d():
         with self.__registered_mutex:
             for path in self.__publications:
                 try:
-                    self.__client.publish(path, payload=self.__publications[path], qos=1, retain=True)
+                    #self.__client.publish(path, payload=self.__publications[path], qos=1, retain=True)
+                    pass
                 except:
                     pass
 
             for path in self.__subscriptions:
                 try:
-                    self.__client.subscribe(path, qos=1)
+                    #self.__client.subscribe(path, qos=1)
+                    pass
                 except:
                     pass
 
@@ -1220,9 +1555,6 @@ class d2d():
             if not d2d.__checkInOutDefinedField(output_params[field]):
                 return False
 
-        if not self.__checkBrokerConnection():
-            return False
-
         if category == "":
             category = d2dConstants.category.GENERIC
 
@@ -1238,7 +1570,7 @@ class d2d():
             self.__threads.append(thread)
 
         elif protocol == d2dConstants.commandProtocol.JSON_TCP:
-            listen_socket = tcpRandomPortListener()
+            listen_socket = tcpListener()
             self.__command_sockets.append(listen_socket)
             thread = threading.Thread(target=d2d.__tcpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
             thread.start()
@@ -1262,7 +1594,7 @@ class d2d():
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
         self.__service_container[name].map[d2dConstants.commandField.TIMEOUT] = timeout
 
-        return self.__publish(self.__service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
+        return self.__broker.publishData(self.__service_used_paths[name], json.dumps(self.__service_container[name].map, indent=1))
 
 
     def enableCommand(self, name, enable):
@@ -1270,20 +1602,14 @@ class d2d():
             return False
 
         self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
-        return self.__publish(self.__service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
+        return self.__broker.publishData(self.__service_used_paths[name], payload=json.dumps(self.__service_container[name].map, indent=1))
 
 
     def subscribeComands(self, mac:str="", service:str="", category:str="", command:str="") -> bool:
 
-        if not self.__checkBrokerConnection():
-            return False
-
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
         if not mqtt_path:
-            return False
-
-        if not self.__subscribe(mqtt_path):
             return False
 
         if regex_path not in self.__subscribe_patterns:
@@ -1323,14 +1649,9 @@ class d2d():
 
 
     def subscribeInfo(self, mac:str="", service:str="", category="", name:str="") -> bool:
-        if not self.__checkBrokerConnection():
-            return False
 
         mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
-
-        if not self.__subscribe(mqtt_path):
-            return False
 
         if regex_path not in self.__subscribe_patterns:
             self.__subscribe_patterns.append(regex_path)
@@ -1369,8 +1690,7 @@ class d2d():
 
 
     def publishInfo(self, name:str, value:str, category:str) -> bool:
-        if not self.__checkBrokerConnection():
-            return False
+        return False
 
         if category == "":
             category = d2dConstants.category.GENERIC
@@ -1388,7 +1708,8 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.VALUE] = value
         mqtt_msg[d2dConstants.infoField.TYPE] = value_type
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        return self.__publish(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1))
+        return False
+        return self.__broker.publishData(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1))
 
 
     def removeUnregistered(self):
