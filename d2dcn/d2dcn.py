@@ -42,7 +42,7 @@ class d2dConstants():
     CLIENT_DISCOVER_WAIT = 5
     MTU = 4096
     END_OF_TX = b'\xFF'
-    MAX_LISTEN_TCP_SOKETS = 0
+    MAX_LISTEN_TCP_SOKETS = -1
     MQTT_PREFIX = "d2dcn"
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
@@ -351,21 +351,15 @@ class tcpClient():
         self.close()
 
 
-    def __connect(self):
+    def connect(self):
         if not self.__open:
-            try:
-                self.__sock.connect((self.__remote_ip, self.__remote_port))
-                self.__open = True
-
-            except:
-                self.__open = False
-
+            self.__open = self.__sock.connect_ex((self.__remote_ip, self.__remote_port)) == 0
         return self.__open
 
 
     def read(self, timeout=-1):
 
-        if self.__connect():
+        if self.connect():
             current_epoch_time = int(time.time())
             while self.__open:
                 try:
@@ -385,7 +379,7 @@ class tcpClient():
 
 
     def send(self, msg):
-        if self.__connect():
+        if self.connect():
 
             if isinstance(msg, str):
                 msg = msg.encode()
@@ -405,6 +399,11 @@ class tcpClient():
                         return False
 
         return False
+
+
+    @property
+    def connected(self):
+        return self.__open
 
 
     @property
@@ -538,6 +537,7 @@ class d2dBroker():
                 shared_self.__master_clients.append(connection)
 
             else:
+                print("Client closed")
                 connection.close()
                 return
 
@@ -614,14 +614,21 @@ class d2dBroker():
                 # Connect to master
                 with shared_self.__mutex:
                     shared_self.__client = tcpClient(master_ip, d2dConstants.BROKER_PORT)
-                    if shared_self.__start_mutex.locked():
-                        shared_self.__start_mutex.release()
+                    shared_self.__client.connect()
+
+                    if shared_self.__client.connected:
+                        if not shared_self.__discovery_daemon.isMaster():
+                            shared_self.__broker_data = {}
+
+                        if shared_self.__start_mutex.locked():
+                            shared_self.__start_mutex.release()
 
                 broker_topics = []
 
+
                 # Read loop
                 print("Start client")
-                while True:
+                while shared_self.__client.connected:
 
                     input_frames = d2dBroker.__readFrames(shared_self.__client)
                     if not input_frames:
