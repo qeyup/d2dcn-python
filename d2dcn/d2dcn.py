@@ -616,7 +616,7 @@ class d2dInfo():
 
 class d2d():
 
-    def __init__(self, broker_discover_timeout=5, broker_discover_retry=-1, service=None, master=True):
+    def __init__(self, service=None, master=True):
         self.__mac = hex(uuid.getnode()).replace("0x", "")
 
         if service:
@@ -626,15 +626,13 @@ class d2d():
             process_name = process.name()
             self.__service = process_name.split(".")[0]
 
-        self.__broker_discover_timeout = broker_discover_timeout
-        self.__broker_discover_retry = broker_discover_retry
-
         self.__threads = []
         self.__command_sockets = []
         self.__service_container = {}
-        self.__local_path = d2dConstants.MQTT_PREFIX + "/" + self.__mac + "/" + self.__service + "/"
+
         self.__callback_mutex = threading.RLock()
         self.__registered_mutex = threading.RLock()
+
         self.__command_wait = threading.Lock()
         self.__info_wait = threading.Lock()
 
@@ -655,10 +653,8 @@ class d2d():
 
         self.__commands = {}
 
-        self.__subscriptions = []
-        self.__publications = {}
-        self.__client = None
-        self.__broker_ip = None
+
+        self.__broker_ip = "127.0.0.1"
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
@@ -667,8 +663,6 @@ class d2d():
 
 
     def __del__(self):
-        if self.__client:
-            self.__client.disconnect()
 
         for name in self.__service_container:
             self.__service_container[name].run = False
@@ -798,15 +792,6 @@ class d2d():
         if not self:
             return
 
-        # Remove unregistered device/service data
-        with self.__registered_mutex:
-            if message.topic.startswith(self.__local_path) and len(message.payload) > 0:
-                if message.topic not in self.__service_used_paths.values() \
-                    and message.topic not in self.__info_used_paths.values():
-                    if message.topic not in self.__unused_received_paths:
-                        self.__unused_received_paths.append(message.topic)
-                return
-
         topic_split = message.topic.split("/")
         if len(topic_split) < 4:
             return
@@ -929,67 +914,6 @@ class d2d():
                     with self.__callback_mutex:
                         if self.__info_remove_callback:
                             self.__info_remove_callback(removed_item)
-
-
-    def __onConnect(weak_self):
-        self = weak_self()
-        if not self:
-            return
-
-        with self.__registered_mutex:
-            for path in self.__publications:
-                try:
-                    #self.__client.publish(path, payload=self.__publications[path], qos=1, retain=True)
-                    pass
-                except:
-                    pass
-
-            for path in self.__subscriptions:
-                try:
-                    #self.__client.subscribe(path, qos=1)
-                    pass
-                except:
-                    pass
-
-
-    def __checkIfRegEx(string):
-        return ".*" in string or "(" in string or "[" in string or ")" in string or "]" in string or "|" in string
-
-
-    def __createMQTTPath(self, mac, service, category, mode, name) -> str:
-
-        if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
-            return ""
-
-        if "#" in mac + service + category + mode + name:
-            return None
-
-        mqtt_path = d2dConstants.MQTT_PREFIX + "/"
-
-        if mac != "" and not d2d.__checkIfRegEx(mac):
-
-            mqtt_path += mac + "/"
-        else:
-            mqtt_path += "+/"
-
-        if service != "" and not d2d.__checkIfRegEx(service):
-            mqtt_path += service + "/"
-        else:
-            mqtt_path += "+/"
-
-        mqtt_path += mode + "/"
-
-        if category != "" and not d2d.__checkIfRegEx(category):
-            mqtt_path += category + "/"
-        else:
-            mqtt_path += "+/"
-
-        if name != "" and not d2d.__checkIfRegEx(name):
-            mqtt_path += name
-        else:
-            mqtt_path += "#"
-
-        return mqtt_path
 
 
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
@@ -1228,45 +1152,6 @@ class d2d():
                     pass
 
 
-    def __publish(self, path, payload=None):
-        if not payload:
-            self.__client.publish(path, payload=None, qos=1, retain=True)
-            with self.__registered_mutex:
-                if path in self.__publications:
-                    self.__publications.pop(path)
-
-            return True
-
-        else:
-            if path not in self.__publications or self.__publications[path] != payload:
-                try:
-                    msg_info = self.__client.publish(path, payload=payload, qos=1, retain=True)
-                    if msg_info.rc == paho.mqtt.client.MQTT_ERR_SUCCESS:
-                        with self.__registered_mutex:
-                            self.__publications[path] = payload
-                        return True
-                    else:
-                        return False
-
-                except:
-                    return False
-
-            else:
-                return True
-
-
-    def __subscribe(self, mqtt_path):
-        if mqtt_path not in self.__subscriptions:
-            try:
-                self.__client.subscribe(mqtt_path, qos=1)
-                with self.__registered_mutex:
-                    self.__subscriptions.append(mqtt_path)
-            except:
-                return False
-
-        return True
-
-
     def __extractCommandInfo(data):
 
         try:
@@ -1388,19 +1273,6 @@ class d2d():
         return self.__shared_table.updateTableEntry(self.__service_used_paths[name], [json.dumps(self.__service_container[name].map)])
 
 
-    def subscribeComands(self, mac:str="", service:str="", category:str="", command:str="") -> bool:
-
-        regex_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
-        mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
-        if not mqtt_path:
-            return False
-
-        if regex_path not in self.__subscribe_patterns:
-            self.__subscribe_patterns.append(regex_path)
-
-        return True
-
-
     def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="", wait:int=0) -> list:
 
         search_command_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
@@ -1454,7 +1326,6 @@ class d2d():
 
     def subscribeInfo(self, mac:str="", service:str="", category="", name:str="") -> bool:
 
-        mqtt_path = self.__createMQTTPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
         if regex_path not in self.__subscribe_patterns:
@@ -1476,9 +1347,6 @@ class d2d():
         # Wait at least one command
         while len(info) == 0 and wait != 0:
 
-            if mqtt_pattern_path not in self.__subscribe_patterns:
-                self.subscribeComands(mac, service, category, name)
-
             self.__info_wait.acquire(blocking=False)
 
             if not self.__info_wait.acquire(blocking=True, timeout=wait):
@@ -1499,7 +1367,8 @@ class d2d():
         if category == "":
             category = d2dConstants.category.GENERIC
 
-        mqtt_path = self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        mqtt_path = None
+        #self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
         if not mqtt_path:
             return False
         self.__info_used_paths[name] = mqtt_path
@@ -1514,17 +1383,6 @@ class d2d():
         mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
         return False
         return self.__broker.publishData(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1))
-
-
-    def removeUnregistered(self):
-        with self.__registered_mutex:
-            for path in self.__unused_received_paths:
-                if path not in self.__service_used_paths.values() \
-                    and path not in self.__info_used_paths.values():
-
-                    self.__publish(path)
-
-            self.__unused_received_paths.clear()
 
 
     def waitThreads(self):
