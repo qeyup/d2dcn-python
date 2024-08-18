@@ -767,17 +767,6 @@ class d2d():
                 self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
-    def __entryAdded(self, client_id, entry_key, data):
-
-        path_info = d2d.__extractPathInfo(entry_key)
-
-
-        # Notify
-        with self.__callback_mutex:
-            if self.__command_add_callback:
-                self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
-
-
     def __entryUpdated(self, client_id, entry_key, data):
 
         command_info = d2d.__extractCommandInfo(data[0])
