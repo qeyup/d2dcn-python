@@ -662,7 +662,7 @@ class d2d():
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
-        self.__shared_table.onNewTableEntry = self.__entryAdded
+        self.__shared_table.onNewTableEntry = self.__entryUpdated
         self.__shared_table.onUpdateTableEntry = self.__entryUpdated
 
 
@@ -781,22 +781,26 @@ class d2d():
     def __entryUpdated(self, client_id, entry_key, data):
 
         command_info = d2d.__extractCommandInfo(data[0])
-        path_info = None
+        path_info = d2d.__extractPathInfo(entry_key)
+        command_updated = False
 
         with self.__registered_mutex:
             if entry_key in self.__commands:
                 shared_ptr = self.__commands[entry_key]()
                 if shared_ptr:
                     shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
-
-                    path_info = d2d.__extractPathInfo(entry_key)
+                    command_updated = True
 
 
         # Notify
-        if path_info:
-            with self.__callback_mutex:
+        with self.__callback_mutex:
+            if command_updated:
                 if self.__command_update_callback:
                     self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+            else:
+                if self.__command_add_callback:
+                    self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __brokerMessageReceived(message, weak_self):
