@@ -468,19 +468,24 @@ class d2dCommandResponse(dict):
 class d2dCommand():
 
     def __init__(self, mac, service, category, name, protocol, ip, port, params, response, enable, timeout, service_info=None):
-        self.configure(mac, service, category, name, protocol, ip, port, params, response, enable, timeout)
-
-
-    def configure(self, mac, service, category, name, protocol, ip, port, params, response, enable, timeout):
         self.__name = name
         self.__mac = mac
         self.__service = service
         self.__category = category
-        self.__params = params
-        self.__response = response
+        self.configure(enable, params, response, protocol, ip, port, timeout)
+
+
+    def configure(self, enable, params=None, response=None, protocol=None, ip=None, port=None, timeout=None):
+
+        if params:
+            self.__params = params
+        if response:
+            self.__response = response
+
         self.__protocol = protocol
         self.__enable = enable
         self.__timeout = timeout
+
         if enable:
             if protocol == d2dConstants.commandProtocol.JSON_UDP:
                 self.__socket = udpClient(ip, port)
@@ -632,10 +637,14 @@ class d2d():
         self.__registered_mutex = threading.RLock()
         self.__command_wait = threading.Lock()
         self.__info_wait = threading.Lock()
+
         self.__command_update_callback = None
-        self.__info_update_callback = None
         self.__command_remove_callback = None
+        self.__command_add_callback = None
+
+        self.__info_update_callback = None
         self.__info_remove_callback = None
+
         self.__registered_commands = {}
         self.__subscribe_patterns = []
         self.__registered_info = {}
@@ -652,6 +661,9 @@ class d2d():
         self.__broker_ip = None
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
+        self.__shared_table.onRemoveTableEntry = self.__entryRemoved
+        self.__shared_table.onNewTableEntry = self.__entryAdded
+        self.__shared_table.onUpdateTableEntry = self.__entryUpdated
 
 
     def __del__(self):
@@ -676,6 +688,18 @@ class d2d():
     @property
     def mac(self):
         return self.__mac
+
+
+    @property
+    def onCommandAdd(self):
+        with self.__callback_mutex:
+            return self.__command_add_callback
+
+
+    @onCommandAdd.setter
+    def onCommandAdd(self, callback):
+        with self.__callback_mutex:
+            self.__command_add_callback = callback
 
 
     @property
@@ -724,6 +748,55 @@ class d2d():
     def onInfoRemove(self, callback):
         with self.__callback_mutex:
             self.__info_remove_callback = callback
+
+
+    def __entryRemoved(self, client_id, entry_key):
+        with self.__registered_mutex:
+            if entry_key in self.__commands:
+                shared_ptr = self.__commands[entry_key]()
+                if shared_ptr:
+                    shared_ptr.configure(False)
+
+
+        path_info = d2d.__extractPathInfo(entry_key)
+
+
+        # Notify
+        with self.__callback_mutex:
+            if self.__info_remove_callback:
+                self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+
+    def __entryAdded(self, client_id, entry_key, data):
+
+        path_info = d2d.__extractPathInfo(entry_key)
+
+
+        # Notify
+        with self.__callback_mutex:
+            if self.__command_add_callback:
+                self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+
+    def __entryUpdated(self, client_id, entry_key, data):
+
+        command_info = d2d.__extractCommandInfo(data[0])
+        path_info = None
+
+        with self.__registered_mutex:
+            if entry_key in self.__commands:
+                shared_ptr = self.__commands[entry_key]()
+                if shared_ptr:
+                    shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
+
+                    path_info = d2d.__extractPathInfo(entry_key)
+
+
+        # Notify
+        if path_info:
+            with self.__callback_mutex:
+                if self.__command_update_callback:
+                    self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __brokerMessageReceived(message, weak_self):
@@ -1366,9 +1439,16 @@ class d2d():
                                                             command_info.protocol, command_info.ip, command_info.port, command_info.params,
                                                             command_info.response, command_info.enable, command_info.timeout)
 
+
+                                # Append to list
                                 commands.append(command_object)
+
+
+                                # Save weak reference
                                 self.__commands[d2d_path] = weakref.ref(command_object)
 
+
+            # Check return value
             end = time.time()
             if len(commands) > 0 or wait < 0 or (wait > 0 and (end - start) > wait):
                 break
