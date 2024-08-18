@@ -653,9 +653,6 @@ class d2d():
 
         self.__commands = {}
 
-
-        self.__broker_ip = "127.0.0.1"
-
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
         self.__shared_table.onNewTableEntry = self.__entryUpdated
@@ -1193,7 +1190,10 @@ class d2d():
 
     def __getOwnIP(self, dst='127.0.0.1'):
 
-        if os.name != 'nt':
+        if not dst:
+            return ""
+
+        elif os.name != 'nt':
             ipr = IPRoute().route('get', dst=dst)
             if len(ipr) > 0:
                 return ipr[0].get_attr('RTA_PREFSRC')
@@ -1255,7 +1255,7 @@ class d2d():
 
         self.__service_container[name].map = {}
         self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = protocol
-        self.__service_container[name].map[d2dConstants.commandField.IP] = self.__getOwnIP(self.__broker_ip)
+        self.__service_container[name].map[d2dConstants.commandField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
         self.__service_container[name].map[d2dConstants.commandField.PORT] = listen_socket.port
         self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
         self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
