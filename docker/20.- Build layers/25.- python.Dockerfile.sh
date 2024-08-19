@@ -5,6 +5,7 @@ set -e
 # Upgrade system
 PACKAGES=()
 PACKAGES+=(psutil)
+PACKAGES+=(pyroute2)
 PACKAGES+=(SharedTableBroker)
 PACKAGES+=(wheel)
 PACKAGES+=(setuptools)
