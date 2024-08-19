@@ -24,13 +24,7 @@ def command_call2(args):
 
 def main():
 
-    if len(sys.argv) > 1:
-        service=sys.argv[1]
-
-    else:
-        service="publish_command_example"
-
-
+    service=sys.argv[1] if len(sys.argv) > 1 else "publish_command_example"
     d2d_object = d2dcn.d2d(service=service)
 
 
