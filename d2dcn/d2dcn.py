@@ -613,6 +613,159 @@ class d2dInfo():
     def online(self):
         return self.__service_info.online
 
+class d2dInfoWriter():
+
+    def __init__(self,mac, service, category, name, valueType):
+        self.__name = name
+        self.__mac = mac
+        self.__service = service
+        self.__category = category
+        self.__valueType = valueType
+    
+
+        if valueType == d2dConstants.valueTypes.BOOL or valueType == d2dConstants.valueTypes.BOOL_ARRAY:
+            self.__default_value = bool()
+
+        elif valueType == d2dConstants.valueTypes.INT or valueType == d2dConstants.valueTypes.INT_ARRAY:
+            self.__default_value = int()
+
+        elif valueType == d2dConstants.valueTypes.STRING or valueType == d2dConstants.valueTypes.STRING_ARRAY:
+            self.__default_value = str()
+
+        elif valueType == d2dConstants.valueTypes.FLOAT or valueType == d2dConstants.valueTypes.FLOAT_ARRAY:
+            self.__default_value = float()
+
+        else:
+            self.__default_value = None
+
+
+        if valueType.endswith(d2dConstants.valueTypes.ARRAY):
+            self.__value = []
+
+        else:
+            self.__value = self.__default_value
+
+
+    @property
+    def name(self):
+        return self.__name
+
+
+    @property
+    def mac(self):
+        return self.__mac
+
+
+    @property
+    def service(self):
+        return self.__service
+
+
+    @property
+    def category(self):
+        return self.__category
+
+
+    @property
+    def value(self):
+        return self.__value
+
+
+    @property
+    def valueType(self):
+        return self.__valueType
+
+
+    @property
+    def value(self):
+        return self.__value
+
+
+    @value.setter
+    def value(self, value):
+        if type(self.__value) == type(list()):
+            ok = True
+            for it in value:
+                if type(it) != type(self.__default_value):
+                    raise Exception("Invalid asigned list type")
+
+        elif type(self.__value) != type(value):
+            raise Exception("Invalid asigned type")
+
+        self.__value = value
+
+
+class d2dInfoReader():
+
+    def __init__(self,mac, service, category, name, valueType):
+        self.__name = name
+        self.__mac = mac
+        self.__service = service
+        self.__category = category
+        self.__valueType = valueType
+        self.__value = None
+        self.__epoch = None
+        self.__online = False
+        self.__on_update_callback = None
+        self.__callback_mutex = threading.RLock()
+
+
+    @property
+    def name(self):
+        return self.__name
+
+
+    @property
+    def mac(self):
+        return self.__mac
+
+
+    @property
+    def service(self):
+        return self.__service
+
+
+    @property
+    def category(self):
+        return self.__category
+
+
+    @property
+    def value(self):
+        return self.__value
+
+
+    @property
+    def valueType(self):
+        return self.__valueType
+
+
+    @property
+    def epoch(self):
+        return self.__epoch
+
+
+    @property
+    def online(self):
+        return self.__online
+
+
+    @property
+    def onUpdateValue(self):
+        with self.__callback_mutex:
+            return self.__on_update_callback
+
+
+    @onUpdateValue.setter
+    def onUpdateValue(self, callback):
+        with self.__callback_mutex:
+            self.__on_update_callback = callback
+
+
+    @property
+    def value(self):
+        return self.__value
+
 
 class d2d():
 
@@ -1324,6 +1477,16 @@ class d2d():
         return commands
 
 
+    def addInfoWriter(self, name:str, category:str, valueType:str) -> d2dInfoWriter:
+        command_path = d2d.__createPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        return d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+
+
+    def getAvailableInfoReaders(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
+        return [d2dInfoReader(self.__mac, self.__service, category, name, d2dConstants.valueTypes.BOOL)]
+
+
+    # Remove
     def subscribeInfo(self, mac:str="", service:str="", category="", name:str="") -> bool:
 
         regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
@@ -1334,6 +1497,7 @@ class d2d():
         return True
 
 
+    # Remove
     def getSubscribedInfo(self, mac:str="", service:str="", category="", name:str="", wait=0) -> dict:
         mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
 
@@ -1361,6 +1525,7 @@ class d2d():
         return info
 
 
+    # Remove
     def publishInfo(self, name:str, value:str, category:str) -> bool:
         return False
 
