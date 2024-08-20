@@ -25,6 +25,7 @@ import json
 import re
 import SharedTableBroker
 import weakref
+import struct
 
 if os.name != 'nt':
     from pyroute2 import IPRoute
@@ -46,6 +47,7 @@ class d2dConstants():
     INFO_LEVEL = "info"
     STATE = "state"
     INFO_MULTICAST_GROUP = "232.10.10.10"
+    INFO_REQUEST = b"req"
 
     class state:
         OFFLINE = "offline"
@@ -108,6 +110,75 @@ class d2dConstants():
 
 class container():
     pass
+
+
+class mcast():
+
+    def __init__(self, ip:str, port:int, listener:bool):
+        self.__ip = ip
+        self.__port = port
+        self.__listener = listener
+        self.__open = True
+        self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+
+        self.__sock.settimeout(0.1)
+
+        if self.__listener:
+
+            mreq = struct.pack("4sl", socket.inet_aton(ip), socket.INADDR_ANY)
+            self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+            self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+            if os.name != 'nt':
+                self.__sock.bind((ip, port))
+            else:
+                self.__sock.bind(('', port))
+
+
+    def __del__(self):
+        self.close()
+
+
+    def read(self, timeout=-1):
+
+        if not self.__listener:
+            return None, None, None
+ 
+        current_epoch_time = float(time.time())
+        while self.__open:
+            try:
+                data, (ip, port) = self.__sock.recvfrom(4096)
+                return data, ip, port
+
+            except socket.timeout:
+                if timeout >= 0 and float(time.time()) - current_epoch_time >= timeout:
+                    return None, None, None
+
+            except socket.error:
+                return None, None, None
+
+
+        return None, None, None
+
+
+    def addSource(self):
+        pass
+
+
+    def send(self, msg):
+        if isinstance(msg, str):
+            msg = msg.encode()
+        try:
+            self.__sock.sendto(msg, (self.__ip, self.__port))
+            return True
+
+        except:
+            return False
+
+
+    def close(self):
+        self.__open = False
+        self.__sock.close()
 
 
 class udpRandomPortListener():
@@ -628,93 +699,130 @@ class d2dInfo():
 class d2dInfoWriter():
 
     def __init__(self,mac, service, category, name, valueType):
-        self.__name = name
-        self.__mac = mac
-        self.__service = service
-        self.__category = category
-        self.__valueType = valueType
+
+        self.__shared = container()
+        self.__shared.run = True
+        self.__shared.udp_socket = None
+        self.__shared.mcast_socket = None
+        self.__shared.name = name
+        self.__shared.mac = mac
+        self.__shared.service = service
+        self.__shared.category = category
+        self.__shared.valueType = valueType
     
 
         if valueType == d2dConstants.valueTypes.BOOL or valueType == d2dConstants.valueTypes.BOOL_ARRAY:
-            self.__default_value = bool()
+            self.__shared.default_value = bool()
 
         elif valueType == d2dConstants.valueTypes.INT or valueType == d2dConstants.valueTypes.INT_ARRAY:
-            self.__default_value = int()
+            self.__shared.default_value = int()
 
         elif valueType == d2dConstants.valueTypes.STRING or valueType == d2dConstants.valueTypes.STRING_ARRAY:
-            self.__default_value = str()
+            self.__shared.default_value = str()
 
         elif valueType == d2dConstants.valueTypes.FLOAT or valueType == d2dConstants.valueTypes.FLOAT_ARRAY:
-            self.__default_value = float()
+            self.__shared.default_value = float()
 
         else:
-            self.__default_value = None
+            self.__shared.default_value = None
 
 
         if valueType.endswith(d2dConstants.valueTypes.ARRAY):
-            self.__value = []
+            self.__shared.value = []
 
         else:
-            self.__value = self.__default_value
+            self.__shared.value = self.__shared.default_value
+
+
+        if self.__shared.default_value != None:
+            self.__shared.udp_socket = udpRandomPortListener()
+            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, self.__shared.udp_socket.port, False)
+            self.__thread = threading.Thread(target=d2dInfoWriter.__listetenUpdateReq, daemon=True, args=[self.__shared])
+            self.__thread.start()
+
+
+    def __del__(self):
+        self.__shared.run = False
+
+        if self.__shared.udp_socket:
+            self.__shared.udp_socket.close()
+
+        if self.__thread:
+            self.__thread.join()
 
 
     @property
     def name(self):
-        return self.__name
+        return self.__shared.name
 
 
     @property
     def mac(self):
-        return self.__mac
+        return self.__shared.mac
 
 
     @property
     def service(self):
-        return self.__service
+        return self.__shared.service
 
 
     @property
     def category(self):
-        return self.__category
+        return self.__shared.category
 
 
     @property
     def value(self):
-        return self.__value
+        return self.__shared.value
 
 
     @property
     def valueType(self):
-        return self.__valueType
+        return self.__shared.valueType
 
 
     @property
     def port(self):
-        return 0
+        if self.__shared.udp_socket:
+            return self.__shared.udp_socket.port
+
+        else:
+            return None
 
 
     @property
     def value(self):
-        return self.__value
+        return self.__shared.value
 
 
     @value.setter
     def value(self, value):
-        if type(self.__value) == type(list()):
+        if type(self.__shared.value) == type(list()):
             ok = True
             for it in value:
-                if type(it) != type(self.__default_value):
+                if type(it) != type(self.__shared.default_value):
                     raise Exception("Invalid asigned list type")
 
-        elif type(self.__value) != type(value):
+        elif type(self.__shared.value) != type(value):
             raise Exception("Invalid asigned type")
 
-        self.__value = value
+
+        if self.__shared.value != value:
+            self.__shared.value = value
+            self.__shared.mcast_socket.send(str(self.__shared.value))
+
+
+    def __listetenUpdateReq(shared):
+
+        while shared.run:
+            data, ip, port = shared.udp_socket.read()
+            if data == d2dConstants.INFO_REQUEST:
+                shared.udp_socket.send(ip, port, str(shared.value))
 
 
 class d2dInfoReader():
 
-    def __init__(self,mac, service, category, name, valueType, shared=container()):
+    def __init__(self,mac, service, category, name, valueType, ip, port, shared=container()):
         self.__shared = shared
         self.__shared.name = name
         self.__shared.mac = mac
@@ -725,7 +833,12 @@ class d2dInfoReader():
         self.__shared.epoch = None
         self.__shared.online = False
         self.__shared.on_update_callback = None
+        self.__shared.udp_socket = udpClient(ip, port)
         self.__shared.callback_mutex = threading.RLock()
+
+
+    def __del__(self):
+        self.__shared.delete_callback()
 
 
     @property
@@ -782,6 +895,12 @@ class d2dInfoReader():
 
     @property
     def value(self):
+        if self.__shared.value == None:
+            self.__shared.udp_socket.send(d2dConstants.INFO_REQUEST)
+            data = self.__shared.udp_socket.read(timeout=5)
+            if data != None:
+                self.__shared.value = data.decode()
+
         return self.__shared.value
 
 
@@ -823,7 +942,9 @@ class d2d():
         self.__unused_received_paths = []
         self.__info_writer_objects = {}
 
+        self.__shared = container()
         self.__commands = {}
+        self.__shared.info_reader_shared = {}
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
@@ -1581,23 +1702,20 @@ class d2d():
                     for d2d_path in d2d_map[client]:
                         if re.search(search_info_path, d2d_path):
 
-                            # Command already setup
-                            if d2d_path in self.__commands:
-                                command_object = self.__commands[d2d_path]()
+                            info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
+                            path_info = d2d.__extractPathInfo(d2d_path)
 
-                            else:
-                                command_object = None
-
-
-                            if not command_object:
-                                info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
-                                path_info = d2d.__extractPathInfo(d2d_path)
-
-                                info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name, info_description.valueType)
+                            shared = container()
+                            weak_shared = weakref.ref(shared)
+                            if d2d_path not in self.__shared.info_reader_shared:
+                                self.__shared.info_reader_shared[d2d_path] = []
+                            self.__shared.info_reader_shared[d2d_path].append(weak_shared)
+                            shared.delete_callback = lambda d2d_path=d2d_path, shared=self.__shared : shared.info_reader_shared[d2d_path].remove(weak_shared)
+                            info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name, info_description.valueType, info_description.ip, info_description.port, shared)
 
 
-                                # Append to list
-                                info_reader_objs.append(info_reader_object)
+                            # Append to list
+                            info_reader_objs.append(info_reader_object)
 
 
             # Check return value
