@@ -45,6 +45,7 @@ class d2dConstants():
     COMMAND_LEVEL = "command"
     INFO_LEVEL = "info"
     STATE = "state"
+    INFO_MULTICAST_GROUP = "232.10.10.10"
 
     class state:
         OFFLINE = "offline"
@@ -72,14 +73,25 @@ class d2dConstants():
         ENABLE = "enable"
         TIMEOUT = "timeout"
 
+    class infoField():
+        PROTOCOL = "protocol"
+        IP = "ip"
+        PORT = "port"
+        TYPE = "type"
+
+        # Remove
+        EPOCH = "epoch"
+        VALUE = "value"
+
     class commandProtocol():
         JSON_UDP = "json-udp"
         JSON_TCP = "json-tcp"
 
-    class infoField():
-        VALUE = "value"
+    class infoProtocol():
+        ASCII = "ASCII"
+
+    class field():
         TYPE = "type"
-        EPOCH = "epoch"
         OPTIONAL = "optional"
 
     class valueTypes():
@@ -677,6 +689,11 @@ class d2dInfoWriter():
 
 
     @property
+    def port(self):
+        return 0
+
+
+    @property
     def value(self):
         return self.__value
 
@@ -794,7 +811,7 @@ class d2d():
         self.__command_remove_callback = None
         self.__command_add_callback = None
 
-        self.__info_update_callback = None
+        self.__info_added_callback = None
         self.__info_remove_callback = None
 
         self.__registered_commands = {}
@@ -804,6 +821,7 @@ class d2d():
         self.__services = {}
         self.__info_used_paths = {}
         self.__unused_received_paths = []
+        self.__info_writer_objects = {}
 
         self.__commands = {}
 
@@ -872,15 +890,15 @@ class d2d():
 
 
     @property
-    def onInfoUpdate(self):
+    def onInfoAdd(self):
         with self.__callback_mutex:
-            return self.__info_update_callback
+            return self.__info_added_callback
 
 
-    @onInfoUpdate.setter
-    def onInfoUpdate(self, callback):
+    @onInfoAdd.setter
+    def onInfoAdd(self, callback):
         with self.__callback_mutex:
-            self.__info_update_callback = callback
+            self.__info_added_callback = callback
 
 
     @property
@@ -896,45 +914,63 @@ class d2d():
 
 
     def __entryRemoved(self, client_id, entry_key):
-        with self.__registered_mutex:
-            if entry_key in self.__commands:
-                shared_ptr = self.__commands[entry_key]()
-                if shared_ptr:
-                    shared_ptr.configure(False)
-
 
         path_info = d2d.__extractPathInfo(entry_key)
+        if path_info.mode == d2dConstants.COMMAND_LEVEL:
+
+            with self.__registered_mutex:
+                if entry_key in self.__commands:
+                    shared_ptr = self.__commands[entry_key]()
+                    if shared_ptr:
+                        shared_ptr.configure(False)
 
 
-        # Notify
-        with self.__callback_mutex:
-            if self.__info_remove_callback:
-                self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+            # Notify
+            with self.__callback_mutex:
+                if self.__info_remove_callback:
+                    self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+        elif path_info.mode == d2dConstants.INFO_LEVEL:
+
+            # Notify
+            with self.__callback_mutex:
+                if self.__info_remove_callback:
+                    self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __entryUpdated(self, client_id, entry_key, data):
 
-        command_info = d2d.__extractCommandInfo(data[0])
         path_info = d2d.__extractPathInfo(entry_key)
-        command_updated = False
+        if path_info.mode == d2dConstants.COMMAND_LEVEL:
 
-        with self.__registered_mutex:
-            if entry_key in self.__commands:
-                shared_ptr = self.__commands[entry_key]()
-                if shared_ptr:
-                    shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
-                    command_updated = True
+            command_info = d2d.__extractCommandInfo(data[0])
+            command_updated = False
+
+            with self.__registered_mutex:
+                if entry_key in self.__commands:
+                    shared_ptr = self.__commands[entry_key]()
+                    if shared_ptr:
+                        shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
+                        command_updated = True
 
 
-        # Notify
-        with self.__callback_mutex:
-            if command_updated:
-                if self.__command_update_callback:
-                    self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+            # Notify
+            with self.__callback_mutex:
+                if command_updated:
+                    if self.__command_update_callback:
+                        self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
-            else:
-                if self.__command_add_callback:
-                    self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                else:
+                    if self.__command_add_callback:
+                        self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+
+        elif path_info.mode == d2dConstants.INFO_LEVEL:
+
+            # Notify
+            with self.__callback_mutex:
+                if self.__info_added_callback:
+                    self.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __brokerMessageReceived(message, weak_self):
@@ -1167,13 +1203,13 @@ class d2d():
 
     def __checkInOutDefinedField(field) -> bool:
 
-        if d2dConstants.infoField.TYPE not in field:
+        if d2dConstants.field.TYPE not in field:
             return False
 
-        elif not isinstance(field[d2dConstants.infoField.TYPE], str):
+        elif not isinstance(field[d2dConstants.field.TYPE], str):
             return False
 
-        elif d2dConstants.infoField.OPTIONAL in field and not isinstance(field[d2dConstants.infoField.OPTIONAL], bool):
+        elif d2dConstants.field.OPTIONAL in field and not isinstance(field[d2dConstants.field.OPTIONAL], bool):
             return False
 
         return True
@@ -1198,13 +1234,13 @@ class d2d():
         for field in data_dict:
             if field not in prototipe_dict:
                 return False
-            if not d2d.__checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.infoField.TYPE]):
+            if not d2d.__checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.field.TYPE]):
                 return False
 
         # Check optional
         for field in prototipe_dict:
             field_prototipe = prototipe_dict[field]
-            mandatory = d2dConstants.infoField.OPTIONAL not in field_prototipe or not field_prototipe[d2dConstants.infoField.OPTIONAL]
+            mandatory = d2dConstants.field.OPTIONAL not in field_prototipe or not field_prototipe[d2dConstants.field.OPTIONAL]
             if field not in data_dict and mandatory:
                 return False
 
@@ -1315,6 +1351,22 @@ class d2d():
             rc.response = command_info[d2dConstants.commandField.OUTPUT]
             rc.enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
             rc.timeout = 5 if d2dConstants.commandField.TIMEOUT not in command_info else command_info[d2dConstants.commandField.TIMEOUT]
+            return rc
+
+        except:
+            return None
+
+
+    def __extractInfoDescription(data):
+
+        try:
+            command_info = json.loads(data)
+            rc = container()
+            rc.protocol = command_info[d2dConstants.infoField.PROTOCOL]
+            rc.ip = command_info[d2dConstants.infoField.IP]
+            rc.port = command_info[d2dConstants.infoField.PORT]
+            rc.valueType = command_info[d2dConstants.infoField.TYPE]
+
             return rc
 
         except:
@@ -1478,13 +1530,85 @@ class d2d():
         return commands
 
 
-    def addInfoWriter(self, name:str, category:str, valueType:str) -> d2dInfoWriter:
-        command_path = d2d.__createPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
-        return d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=d2dConstants.infoProtocol.ASCII) -> d2dInfoWriter:
+
+        # Set defaults
+        if category == "":
+            category = d2dConstants.category.GENERIC
+
+        info_path = d2d.__createPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+
+
+        with self.__registered_mutex:
+            if info_path not in self.__info_writer_objects:
+                info_writer = d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+                self.__info_writer_objects[info_path] = weakref.ref(info_writer)
+
+            else:
+                info_writer = self.__info_writer_objects[info_path]()
+
+                if not info_writer:
+                    info_writer = d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+                    self.__info_writer_objects[info_path] = weakref.ref(info_writer)
+
+        info_description = {}
+        info_description[d2dConstants.infoField.PROTOCOL] = protocol
+        info_description[d2dConstants.infoField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
+        info_description[d2dConstants.infoField.PORT] = info_writer.port
+        info_description[d2dConstants.infoField.TYPE] = valueType
+
+
+        if self.__shared_table.updateTableEntry(info_path, [json.dumps(info_description)]):
+            return info_writer
+
+        else:
+            return None
 
 
     def getAvailableInfoReaders(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
-        return [d2dInfoReader(self.__mac, self.__service, category, name, d2dConstants.valueTypes.BOOL)]
+
+
+        search_info_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
+
+        info_reader_objs = []
+        start = time.time()
+
+        # Get commands from table
+        while True:
+            with self.__registered_mutex:
+                d2d_map = self.__shared_table.geMapData()
+                for client in d2d_map:
+                    for d2d_path in d2d_map[client]:
+                        if re.search(search_info_path, d2d_path):
+
+                            # Command already setup
+                            if d2d_path in self.__commands:
+                                command_object = self.__commands[d2d_path]()
+
+                            else:
+                                command_object = None
+
+
+                            if not command_object:
+                                info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
+                                path_info = d2d.__extractPathInfo(d2d_path)
+
+                                info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name, info_description.valueType)
+
+
+                                # Append to list
+                                info_reader_objs.append(info_reader_object)
+
+
+            # Check return value
+            end = time.time()
+            if len(info_reader_objs) > 0 or wait < 0 or (wait > 0 and (end - start) > wait):
+                break
+
+            else:
+                time.sleep(0.1)
+
+        return info_reader_objs
 
 
     # Remove
