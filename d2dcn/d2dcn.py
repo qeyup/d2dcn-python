@@ -35,7 +35,6 @@ version = "0.5.0"
 
 class d2dConstants():
     BROKER_SERVICE_NAME = "D2D_TABLE"
-    MQTT_BROKER_PORT = 1883
     BROKER_PORT = 18832
     CLIENT_DISCOVER_WAIT = 5
     MTU = 4096
@@ -613,6 +612,7 @@ class d2dInfo():
     def online(self):
         return self.__service_info.online
 
+
 class d2dInfoWriter():
 
     def __init__(self,mac, service, category, name, valueType):
@@ -697,74 +697,75 @@ class d2dInfoWriter():
 
 class d2dInfoReader():
 
-    def __init__(self,mac, service, category, name, valueType):
-        self.__name = name
-        self.__mac = mac
-        self.__service = service
-        self.__category = category
-        self.__valueType = valueType
-        self.__value = None
-        self.__epoch = None
-        self.__online = False
-        self.__on_update_callback = None
-        self.__callback_mutex = threading.RLock()
+    def __init__(self,mac, service, category, name, valueType, shared=container()):
+        self.__shared = shared
+        self.__shared.name = name
+        self.__shared.mac = mac
+        self.__shared.service = service
+        self.__shared.category = category
+        self.__shared.valueType = valueType
+        self.__shared.value = None
+        self.__shared.epoch = None
+        self.__shared.online = False
+        self.__shared.on_update_callback = None
+        self.__shared.callback_mutex = threading.RLock()
 
 
     @property
     def name(self):
-        return self.__name
+        return self.__shared.name
 
 
     @property
     def mac(self):
-        return self.__mac
+        return self.__shared.mac
 
 
     @property
     def service(self):
-        return self.__service
+        return self.__shared.service
 
 
     @property
     def category(self):
-        return self.__category
+        return self.__shared.category
 
 
     @property
     def value(self):
-        return self.__value
+        return self.__shared.value
 
 
     @property
     def valueType(self):
-        return self.__valueType
+        return self.__shared.valueType
 
 
     @property
     def epoch(self):
-        return self.__epoch
+        return self.__shared.epoch
 
 
     @property
     def online(self):
-        return self.__online
+        return self.__shared.online
 
 
     @property
     def onUpdateValue(self):
-        with self.__callback_mutex:
-            return self.__on_update_callback
+        with self.__shared.callback_mutex:
+            return self.__shared.on_update_callback
 
 
     @onUpdateValue.setter
     def onUpdateValue(self, callback):
-        with self.__callback_mutex:
-            self.__on_update_callback = callback
+        with self.__shared.callback_mutex:
+            self.__shared.on_update_callback = callback
 
 
     @property
     def value(self):
-        return self.__value
+        return self.__shared.value
 
 
 class d2d():
