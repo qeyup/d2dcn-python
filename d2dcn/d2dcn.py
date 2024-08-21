@@ -30,6 +30,9 @@ import struct
 if os.name != 'nt':
     from pyroute2 import IPRoute
 
+if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
+    setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
+
 
 version = "0.5.0"
 
@@ -78,7 +81,8 @@ class d2dConstants():
     class infoField():
         PROTOCOL = "protocol"
         IP = "ip"
-        PORT = "port"
+        REQUEST_PORT = "req_port"
+        UPDATE_PORT = "update_port"
         TYPE = "type"
 
         # Remove
@@ -114,36 +118,40 @@ class container():
 
 class mcast():
 
-    def __init__(self, ip:str, port:int, listener:bool):
+    def __init__(self, ip:str, port:int=0, src:str=""):
         self.__ip = ip
-        self.__port = port
-        self.__listener = listener
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 
         self.__sock.settimeout(0.1)
 
-        if self.__listener:
+        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if src != "":
+            self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_SOURCE_MEMBERSHIP,
+                struct.pack("=4sl4s", socket.inet_aton(ip), socket.INADDR_ANY, socket.inet_aton(src)))
+        else:
+            self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP,
+                struct.pack("=4sl", socket.inet_aton(ip), socket.INADDR_ANY))
 
-            mreq = struct.pack("4sl", socket.inet_aton(ip), socket.INADDR_ANY)
-            self.__sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-            self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        if os.name != 'nt':
+            self.__sock.bind((ip, port))
+        else:
+            self.__sock.bind(('', port))
 
-            if os.name != 'nt':
-                self.__sock.bind((ip, port))
-            else:
-                self.__sock.bind(('', port))
+        self.__port = self.__sock.getsockname()[1]
 
 
     def __del__(self):
         self.close()
 
 
+    @property
+    def port(self):
+        return self.__port
+
+
     def read(self, timeout=-1):
 
-        if not self.__listener:
-            return None, None, None
- 
         current_epoch_time = float(time.time())
         while self.__open:
             try:
@@ -159,10 +167,6 @@ class mcast():
 
 
         return None, None, None
-
-
-    def addSource(self):
-        pass
 
 
     def send(self, msg):
@@ -513,10 +517,6 @@ class tcpClient():
         self.__sock.close()
 
 
-class d2dInfoReport():
-    pass
-
-
 class d2dCommandResponse(dict):
 
     def __init__(self, str_response):
@@ -709,7 +709,7 @@ class d2dInfoWriter():
         self.__shared.service = service
         self.__shared.category = category
         self.__shared.valueType = valueType
-    
+
 
         if valueType == d2dConstants.valueTypes.BOOL or valueType == d2dConstants.valueTypes.BOOL_ARRAY:
             self.__shared.default_value = bool()
@@ -736,7 +736,7 @@ class d2dInfoWriter():
 
         if self.__shared.default_value != None:
             self.__shared.udp_socket = udpRandomPortListener()
-            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, self.__shared.udp_socket.port, False)
+            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP)
             self.__thread = threading.Thread(target=d2dInfoWriter.__listetenUpdateReq, daemon=True, args=[self.__shared])
             self.__thread.start()
 
@@ -746,6 +746,9 @@ class d2dInfoWriter():
 
         if self.__shared.udp_socket:
             self.__shared.udp_socket.close()
+
+        if self.__shared.mcast_socket:
+            self.__shared.mcast_socket.close()
 
         if self.__thread:
             self.__thread.join()
@@ -782,9 +785,17 @@ class d2dInfoWriter():
 
 
     @property
-    def port(self):
+    def requestPort(self):
         if self.__shared.udp_socket:
             return self.__shared.udp_socket.port
+
+        else:
+            return None
+
+    @property
+    def updatePort(self):
+        if self.__shared.mcast_socket:
+            return self.__shared.mcast_socket.port
 
         else:
             return None
@@ -822,8 +833,9 @@ class d2dInfoWriter():
 
 class d2dInfoReader():
 
-    def __init__(self,mac, service, category, name, valueType, ip, port, shared=container()):
-        self.__shared = shared
+    def __init__(self,mac, service, category, name, valueType, ip, req_port, update_port):
+        self.__shared = container()
+        self.__shared.run = True
         self.__shared.name = name
         self.__shared.mac = mac
         self.__shared.service = service
@@ -833,13 +845,29 @@ class d2dInfoReader():
         self.__shared.epoch = None
         self.__shared.online = False
         self.__shared.on_update_callback = None
-        self.__shared.udp_socket = udpClient(ip, port)
         self.__shared.callback_mutex = threading.RLock()
+        self.__shared.udp_socket = udpClient(ip, req_port)
+        self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, update_port, ip)
+        self.__thread = threading.Thread(target=d2dInfoReader.__read_updates_thread, daemon=True, args=[self.__shared])
+        self.__thread.start()
 
 
     def __del__(self):
-        self.__shared.delete_callback()
+        self.__shared.run = False
+        self.__shared.mcast_socket.close()
+        self.__shared.udp_socket.close()
+        self.__thread.join()
 
+
+    def __read_updates_thread(shared):
+        while shared.run:
+
+            data, ip, port = shared.mcast_socket.read()
+            if data != None:
+                shared.value = data.decode()
+                with shared.callback_mutex:
+                    if shared.on_update_callback:
+                        shared.on_update_callback()
 
     @property
     def name(self):
@@ -1485,7 +1513,8 @@ class d2d():
             rc = container()
             rc.protocol = command_info[d2dConstants.infoField.PROTOCOL]
             rc.ip = command_info[d2dConstants.infoField.IP]
-            rc.port = command_info[d2dConstants.infoField.PORT]
+            rc.req_port = command_info[d2dConstants.infoField.REQUEST_PORT]
+            rc.update_port = command_info[d2dConstants.infoField.UPDATE_PORT]
             rc.valueType = command_info[d2dConstants.infoField.TYPE]
 
             return rc
@@ -1675,7 +1704,8 @@ class d2d():
         info_description = {}
         info_description[d2dConstants.infoField.PROTOCOL] = protocol
         info_description[d2dConstants.infoField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
-        info_description[d2dConstants.infoField.PORT] = info_writer.port
+        info_description[d2dConstants.infoField.REQUEST_PORT] = info_writer.requestPort
+        info_description[d2dConstants.infoField.UPDATE_PORT] = info_writer.updatePort
         info_description[d2dConstants.infoField.TYPE] = valueType
 
 
@@ -1705,13 +1735,8 @@ class d2d():
                             info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
                             path_info = d2d.__extractPathInfo(d2d_path)
 
-                            shared = container()
-                            weak_shared = weakref.ref(shared)
-                            if d2d_path not in self.__shared.info_reader_shared:
-                                self.__shared.info_reader_shared[d2d_path] = []
-                            self.__shared.info_reader_shared[d2d_path].append(weak_shared)
-                            shared.delete_callback = lambda d2d_path=d2d_path, shared=self.__shared : shared.info_reader_shared[d2d_path].remove(weak_shared)
-                            info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name, info_description.valueType, info_description.ip, info_description.port, shared)
+                            info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name,
+                                info_description.valueType, info_description.ip, info_description.req_port, info_description.update_port)
 
 
                             # Append to list
