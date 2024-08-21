@@ -517,6 +517,138 @@ class tcpClient():
         self.__sock.close()
 
 
+class typeTools():
+
+    def getType(data) -> str:
+
+        if isinstance(data, float):
+            return d2dConstants.valueTypes.FLOAT
+
+        elif isinstance(data, bool):
+            return d2dConstants.valueTypes.BOOL
+
+        elif isinstance(data, int):
+            return d2dConstants.valueTypes.INT
+
+        elif isinstance(data, str):
+            return d2dConstants.valueTypes.STRING
+
+        elif isinstance(data, list):
+
+            detected_type = ""
+            for item in data:
+                if detected_type == "":
+                    detected_type = typeTools.getType(item)
+                    if detected_type == "":
+                        return ""
+                else:
+                    aux = typeTools.getType(item)
+                    if aux != detected_type:
+                        return ""
+
+            if len(data) == 0:
+                return d2dConstants.valueTypes.ARRAY
+            
+            elif detected_type == d2dConstants.valueTypes.FLOAT:
+                return d2dConstants.valueTypes.FLOAT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.BOOL:
+                return d2dConstants.valueTypes.BOOL_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.INT:
+                return d2dConstants.valueTypes.INT_ARRAY
+
+            elif detected_type == d2dConstants.valueTypes.STRING:
+                return d2dConstants.valueTypes.STRING_ARRAY
+
+            else:
+                return ""
+
+        else:
+            return ""
+
+
+    def checkFieldType(field, field_type):
+        detected_type = typeTools.getType(field)
+
+        if detected_type == field_type:
+            return True
+
+        elif detected_type == d2dConstants.valueTypes.ARRAY and d2dConstants.valueTypes.ARRAY in field_type:
+            return True
+        
+        else:
+            return False
+
+
+    def convevertFromASCII(data, data_type):
+
+        try:
+            if data_type == d2dConstants.valueTypes.BOOL:
+                return bool(int(data))
+
+            elif data_type == d2dConstants.valueTypes.INT:
+                return int(data)
+
+            elif data_type == d2dConstants.valueTypes.STRING:
+                return str(data)
+
+            elif data_type == d2dConstants.valueTypes.FLOAT:
+                return float(data)
+
+            elif data_type == d2dConstants.valueTypes.ARRAY or d2dConstants.valueTypes.ARRAY in data_type:
+                
+                rl = []
+                aux_list = json.loads(data)
+                for item in aux_list:
+                    if data_type == d2dConstants.valueTypes.BOOL_ARRAY:
+                        rl.append(bool(item))
+
+                    elif data_type == d2dConstants.valueTypes.INT_ARRAY:
+                        rl.append(int(item))
+
+                    elif data_type == d2dConstants.valueTypes.STRING_ARRAY:
+                        rl.append(str(item))
+
+                    elif data_type == d2dConstants.valueTypes.FLOAT_ARRAY:
+                        rl.append(float(item))
+
+                return rl
+
+            else:
+                return None
+
+        except:
+            return None
+
+
+    def convertToASCII(data, data_type):
+        try:
+            if data_type == d2dConstants.valueTypes.BOOL:
+                return str(1 if data else 0)
+
+            elif data_type == d2dConstants.valueTypes.INT:
+                return str(data)
+
+            elif data_type == d2dConstants.valueTypes.STRING:
+                return str(data)
+
+            elif data_type == d2dConstants.valueTypes.FLOAT:
+                return str(data)
+
+            elif data_type == d2dConstants.valueTypes.ARRAY or d2dConstants.valueTypes.ARRAY in data_type:
+                if not isinstance(data, list):
+                    return None
+
+                return json.dumps(data)
+
+            else:
+                return None
+
+        except:
+            return None
+
+
 class d2dCommandResponse(dict):
 
     def __init__(self, str_response):
@@ -651,51 +783,6 @@ class d2dCommand():
         return d2dCommandResponse(response) 
 
 
-class d2dInfo():
-
-    def __init__(self,mac, service, category, name, value, valueType, epoch, service_info):
-        self.__name = name
-        self.__mac = mac
-        self.__service = service
-        self.__category = category
-        self.__value = value
-        self.__epoch = epoch
-        self.__valueType = valueType
-        self.__service_info = service_info
-
-    @property
-    def name(self):
-        return self.__name
-
-    @property
-    def mac(self):
-        return self.__mac
-
-    @property
-    def service(self):
-        return self.__service
-
-    @property
-    def category(self):
-        return self.__category
-
-    @property
-    def value(self):
-        return self.__value
-
-    @property
-    def valueType(self):
-        return self.__valueType
-
-    @property
-    def epoch(self):
-        return self.__epoch
-
-    @property
-    def online(self):
-        return self.__service_info.online
-
-
 class d2dInfoWriter():
 
     def __init__(self,mac, service, category, name, valueType):
@@ -820,7 +907,7 @@ class d2dInfoWriter():
 
         if self.__shared.value != value:
             self.__shared.value = value
-            self.__shared.mcast_socket.send(str(self.__shared.value))
+            self.__shared.mcast_socket.send(typeTools.convertToASCII(self.__shared.value, self.__shared.valueType))
 
 
     def __listetenUpdateReq(shared):
@@ -828,7 +915,7 @@ class d2dInfoWriter():
         while shared.run:
             data, ip, port = shared.udp_socket.read()
             if data == d2dConstants.INFO_REQUEST:
-                shared.udp_socket.send(ip, port, str(shared.value))
+                shared.udp_socket.send(ip, port, typeTools.convertToASCII(shared.value, shared.valueType))
 
 
 class d2dInfoReader():
@@ -843,7 +930,7 @@ class d2dInfoReader():
         self.__shared.valueType = valueType
         self.__shared.value = None
         self.__shared.epoch = None
-        self.__shared.online = False
+        self.__shared.online = True
         self.__shared.on_update_callback = None
         self.__shared.callback_mutex = threading.RLock()
         self.__shared.udp_socket = udpClient(ip, req_port)
@@ -864,7 +951,8 @@ class d2dInfoReader():
 
             data, ip, port = shared.mcast_socket.read()
             if data != None:
-                shared.value = data.decode()
+                shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
+                shared.epoch = int(time.time())
                 with shared.callback_mutex:
                     if shared.on_update_callback:
                         shared.on_update_callback()
@@ -927,7 +1015,8 @@ class d2dInfoReader():
             self.__shared.udp_socket.send(d2dConstants.INFO_REQUEST)
             data = self.__shared.udp_socket.read(timeout=5)
             if data != None:
-                self.__shared.value = data.decode()
+                self.__shared.value = typeTools.convevertFromASCII(data.decode(), self.__shared.valueType)
+                self.__shared.epoch = int(time.time())
 
         return self.__shared.value
 
@@ -1122,136 +1211,6 @@ class d2d():
                     self.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
-    def __brokerMessageReceived(message, weak_self):
-
-        self = weak_self()
-        if not self:
-            return
-
-        topic_split = message.topic.split("/")
-        if len(topic_split) < 4:
-            return
-
-        prefix = topic_split[0]
-        mac = topic_split[1]
-        service = topic_split[2]
-        mode = topic_split[3]
-        service_path = prefix + "/" + mac + "/" + service
-
-        if prefix != d2dConstants.MQTT_PREFIX:
-            return
-
-        with self.__registered_mutex:
-            if service_path not in self.__services:
-                self.__services[service_path] = container()
-            self.__services[service_path].online = True
-
-
-        if mode == d2dConstants.STATE:
-            with self.__registered_mutex:
-                self.__services[service_path].online = message.payload.decode() != d2dConstants.state.OFFLINE
-
-                with self.__callback_mutex:
-                    if self.__command_update_callback:
-                        for command_path in self.__registered_commands:
-                            self.__command_update_callback(self.__registered_commands[command_path])
-                    if self.__info_update_callback:
-                        for info_path in self.__registered_info:
-                            self.__info_update_callback(self.__registered_info[info_path])
-
-            return
-
-
-        if len(topic_split) < 6:
-            return
-        category = topic_split[4]
-        name = "/".join(topic_split[5:])
-
-        ok = False
-        for subscriber in self.__subscribe_patterns:
-
-            if re.search(subscriber, message.topic):
-                ok = True
-                break
-        if not ok:
-            return
-
-
-
-        try:
-            command_info = json.loads(message.payload)
-        except:
-            command_info = None
-
-        if command_info:
-
-            if mode == d2dConstants.COMMAND_LEVEL:
-
-                try:
-                    protocol = command_info[d2dConstants.commandField.PROTOCOL]
-                    ip = command_info[d2dConstants.commandField.IP]
-                    port = command_info[d2dConstants.commandField.PORT]
-                    params = command_info[d2dConstants.commandField.INPUT]
-                    response = command_info[d2dConstants.commandField.OUTPUT]
-                    enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
-                    timeout = 5 if d2dConstants.commandField.TIMEOUT not in command_info else command_info[d2dConstants.commandField.TIMEOUT]
-                except:
-                    return
-
-                command_object = d2dCommand(mac, service, category, name, protocol, ip, port, params, response, enable, timeout, self.__services[service_path])
-                with self.__registered_mutex:
-                    self.__registered_commands[message.topic] = command_object
-
-                with self.__callback_mutex:
-                    if self.__command_update_callback:
-                        self.__command_update_callback(command_object)
-
-                if self.__command_wait.locked():
-                    self.__command_wait.release()
-
-            elif mode == d2dConstants.INFO_LEVEL:
-                try:
-                    value = command_info[d2dConstants.infoField.VALUE]
-                    valtype = command_info[d2dConstants.infoField.TYPE]
-                    epoch = command_info[d2dConstants.infoField.EPOCH]
-                except:
-                    return
-
-                info_object = d2dInfo(mac, service, category, name, value, valtype, epoch, self.__services[service_path])
-                with self.__registered_mutex:
-                    self.__registered_info[message.topic] = info_object
-
-                with self.__callback_mutex:
-                    if self.__info_update_callback:
-                        self.__info_update_callback(info_object)
-
-                if self.__info_wait.locked():
-                    self.__info_wait.release()
-
-        else:
-            removed_item = None
-
-            if mode == d2dConstants.COMMAND_LEVEL:
-                with self.__registered_mutex:
-                    if message.topic in self.__registered_commands:
-                        removed_item = self.__registered_commands.pop(message.topic)
-
-                if removed_item:
-                    with self.__callback_mutex:
-                        if self.__command_remove_callback:
-                            self.__command_remove_callback(removed_item)
-
-            elif mode == d2dConstants.INFO_LEVEL:
-                with self.__registered_mutex:
-                    if message.topic in self.__registered_info:
-                        removed_item = self.__registered_info.pop(message.topic)
-
-                if removed_item:
-                    with self.__callback_mutex:
-                        if self.__info_remove_callback:
-                            self.__info_remove_callback(removed_item)
-
-
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
 
         if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
@@ -1301,55 +1260,6 @@ class d2d():
         return regex_path
 
 
-    def __getType(data) -> str:
-
-        if isinstance(data, float):
-            return d2dConstants.valueTypes.FLOAT
-
-        elif isinstance(data, bool):
-            return d2dConstants.valueTypes.BOOL
-
-        elif isinstance(data, int):
-            return d2dConstants.valueTypes.INT
-
-        elif isinstance(data, str):
-            return d2dConstants.valueTypes.STRING
-
-        elif isinstance(data, list):
-
-            detected_type = ""
-            for item in data:
-                if detected_type == "":
-                    detected_type = d2d.__getType(item)
-                    if detected_type == "":
-                        return ""
-                else:
-                    aux = d2d.__getType(item)
-                    if aux != detected_type:
-                        return ""
-
-            if len(data) == 0:
-                return d2dConstants.valueTypes.ARRAY
-            
-            elif detected_type == d2dConstants.valueTypes.FLOAT:
-                return d2dConstants.valueTypes.FLOAT_ARRAY
-
-            elif detected_type == d2dConstants.valueTypes.BOOL:
-                return d2dConstants.valueTypes.BOOL_ARRAY
-
-            elif detected_type == d2dConstants.valueTypes.INT:
-                return d2dConstants.valueTypes.INT_ARRAY
-
-            elif detected_type == d2dConstants.valueTypes.STRING:
-                return d2dConstants.valueTypes.STRING_ARRAY
-            
-            else:
-                return ""
-
-        else:
-            return ""
-
-
     def __checkInOutDefinedField(field) -> bool:
 
         if d2dConstants.field.TYPE not in field:
@@ -1364,26 +1274,13 @@ class d2d():
         return True
 
 
-    def __checkFieldType(field, field_type):
-        detected_type = d2d.__getType(field)
-
-        if detected_type == field_type:
-            return True
-
-        elif detected_type == d2dConstants.valueTypes.ARRAY and d2dConstants.valueTypes.ARRAY in field_type:
-            return True
-        
-        else:
-            return False
-
-
     def __checkInOutField(data_dict, prototipe_dict) -> bool:
 
         # Chect type and non-exists
         for field in data_dict:
             if field not in prototipe_dict:
                 return False
-            if not d2d.__checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.field.TYPE]):
+            if not typeTools.checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.field.TYPE]):
                 return False
 
         # Check optional
@@ -1806,7 +1703,7 @@ class d2d():
             return False
         self.__info_used_paths[name] = mqtt_path
 
-        value_type = d2d.__getType(value)
+        value_type = typeTools.getType(value)
         if value_type == "":
             return False
 
