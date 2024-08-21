@@ -8,7 +8,7 @@ import threading
 
 
 def newData(mutex:threading.Lock):
-    if mutex.locked:
+    if mutex.locked():
         mutex.release()
 
 
@@ -22,7 +22,7 @@ def main():
     print("Found", len(info_reader_objects), "reader objects")
 
     for reader_obj in info_reader_objects:
-        reader_obj.onUpdateValue = lambda mutex=mutex : newData(newData)
+        reader_obj.onUpdateValue = lambda mutex=mutex : newData(mutex)
 
     while len(info_reader_objects) > 0 and mutex.acquire():
         print([info_reader_object.value for info_reader_object in info_reader_objects])
