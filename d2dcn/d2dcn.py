@@ -1052,7 +1052,7 @@ class d2d():
 
         self.__shared = container()
         self.__commands = {}
-        self.__shared.info_reader_shared = {}
+        self.__shared.info_readers = {}
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
@@ -1549,12 +1549,11 @@ class d2d():
                                                             command_info.response, command_info.enable, command_info.timeout)
 
 
-                                # Append to list
-                                commands.append(command_object)
-
-
                                 # Save weak reference
                                 self.__commands[d2d_path] = weakref.ref(command_object)
+
+                            # Append to list
+                            commands.append(command_object)
 
 
             # Check return value
@@ -1620,11 +1619,24 @@ class d2d():
                     for d2d_path in d2d_map[client]:
                         if re.search(search_info_path, d2d_path):
 
-                            info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
-                            path_info = d2d.__extractPathInfo(d2d_path)
+                            # Command already setup
+                            if d2d_path in self.__shared.info_readers:
+                                info_reader_object = self.__shared.info_readers[d2d_path]()
 
-                            info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name,
-                                info_description.valueType, info_description.ip, info_description.req_port, info_description.update_port)
+                            else:
+                                info_reader_object = None
+
+
+                            if not info_reader_object:
+                                info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
+                                path_info = d2d.__extractPathInfo(d2d_path)
+
+                                info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name,
+                                    info_description.valueType, info_description.ip, info_description.req_port, info_description.update_port)
+
+
+                                # Save weak reference
+                                self.__shared.info_readers[d2d_path] = weakref.ref(info_reader_object)
 
 
                             # Append to list
