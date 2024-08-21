@@ -1040,9 +1040,6 @@ class d2d():
         self.__callback_mutex = threading.RLock()
         self.__registered_mutex = threading.RLock()
 
-        self.__command_wait = threading.Lock()
-        self.__info_wait = threading.Lock()
-
         self.__command_update_callback = None
         self.__command_remove_callback = None
         self.__command_add_callback = None
@@ -1050,13 +1047,7 @@ class d2d():
         self.__info_added_callback = None
         self.__info_remove_callback = None
 
-        self.__registered_commands = {}
-        self.__subscribe_patterns = []
-        self.__registered_info = {}
         self.__service_used_paths = {}
-        self.__services = {}
-        self.__info_used_paths = {}
-        self.__unused_received_paths = []
         self.__info_writer_objects = {}
 
         self.__shared = container()
@@ -1649,70 +1640,6 @@ class d2d():
                 time.sleep(0.1)
 
         return info_reader_objs
-
-
-    # Remove
-    def subscribeInfo(self, mac:str="", service:str="", category="", name:str="") -> bool:
-
-        regex_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
-
-        if regex_path not in self.__subscribe_patterns:
-            self.__subscribe_patterns.append(regex_path)
-
-        return True
-
-
-    # Remove
-    def getSubscribedInfo(self, mac:str="", service:str="", category="", name:str="", wait=0) -> dict:
-        mqtt_pattern_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
-
-        info = []
-        with self.__registered_mutex:
-            for mqtt_path in self.__registered_info:
-                if re.search(mqtt_pattern_path, mqtt_path):
-                    info.append(self.__registered_info[mqtt_path])
-
-
-        # Wait at least one command
-        while len(info) == 0 and wait != 0:
-
-            self.__info_wait.acquire(blocking=False)
-
-            if not self.__info_wait.acquire(blocking=True, timeout=wait):
-                break
-
-            with self.__registered_mutex:
-                for mqtt_path in self.__registered_info:
-                    if re.search(mqtt_pattern_path, mqtt_path):
-                        info.append(self.__registered_info[mqtt_path])
-
-
-        return info
-
-
-    # Remove
-    def publishInfo(self, name:str, value:str, category:str) -> bool:
-        return False
-
-        if category == "":
-            category = d2dConstants.category.GENERIC
-
-        mqtt_path = None
-        #self.__createMQTTPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
-        if not mqtt_path:
-            return False
-        self.__info_used_paths[name] = mqtt_path
-
-        value_type = typeTools.getType(value)
-        if value_type == "":
-            return False
-
-        mqtt_msg = {}
-        mqtt_msg[d2dConstants.infoField.VALUE] = value
-        mqtt_msg[d2dConstants.infoField.TYPE] = value_type
-        mqtt_msg[d2dConstants.infoField.EPOCH] = int(time.time())
-        return False
-        return self.__broker.publishData(self.__info_used_paths[name], payload=json.dumps(mqtt_msg, indent=1))
 
 
     def waitThreads(self):
