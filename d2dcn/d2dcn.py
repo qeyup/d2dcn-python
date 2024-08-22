@@ -1468,6 +1468,11 @@ class d2d():
             category = d2dConstants.category.GENERIC
 
 
+        # Check if already registered
+        if name in self.__service_container:
+            return False
+
+
         # Create listen thread
         self.__service_container[name] = container()
         self.__service_container[name].run = True
