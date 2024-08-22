@@ -649,7 +649,7 @@ class typeTools():
             return None
 
 
-class d2dCommandResponse(dict):
+class commandResponse(dict):
 
     def __init__(self, str_response):
         super().__init__()
@@ -679,7 +679,7 @@ class d2dCommandResponse(dict):
         return self.__success
 
 
-class d2dCommand():
+class command():
 
     def __init__(self, mac, service, category, name, protocol, ip, port, params, response, enable, timeout, service_info=None):
         self.__name = name
@@ -759,7 +759,7 @@ class d2dCommand():
             timeout = self.__timeout
 
         if self.__socket == None:
-            return d2dCommandResponse(constants.commandErrorMsg.NOT_ENABLE_ERROR)
+            return commandResponse(constants.commandErrorMsg.NOT_ENABLE_ERROR)
 
         try:
             response = constants.commandErrorMsg.CONNECTION_ERROR
@@ -780,10 +780,10 @@ class d2dCommand():
             pass
 
 
-        return d2dCommandResponse(response) 
+        return commandResponse(response) 
 
 
-class d2dInfoWriter():
+class infoWriter():
 
     def __init__(self,mac, service, category, name, valueType):
 
@@ -824,7 +824,7 @@ class d2dInfoWriter():
         if self.__shared.default_value != None:
             self.__shared.udp_socket = udpRandomPortListener()
             self.__shared.mcast_socket = mcast(constants.INFO_MULTICAST_GROUP)
-            self.__thread = threading.Thread(target=d2dInfoWriter.__listetenUpdateReq, daemon=True, args=[self.__shared])
+            self.__thread = threading.Thread(target=infoWriter.__listetenUpdateReq, daemon=True, args=[self.__shared])
             self.__thread.start()
 
 
@@ -918,7 +918,7 @@ class d2dInfoWriter():
                 shared.udp_socket.send(ip, port, typeTools.convertToASCII(shared.value, shared.valueType))
 
 
-class d2dInfoReader():
+class infoReader():
 
     def __init__(self,mac, service, category, name, valueType, ip, req_port, update_port):
         self.__shared = container()
@@ -958,7 +958,7 @@ class d2dInfoReader():
             self.__shared.run = True
             self.__shared.udp_socket = udpClient(ip, req_port)
             self.__shared.mcast_socket = mcast(constants.INFO_MULTICAST_GROUP, update_port, ip)
-            self.__thread = threading.Thread(target=d2dInfoReader.__read_updates_thread, daemon=True, args=[self.__shared])
+            self.__thread = threading.Thread(target=infoReader.__read_updates_thread, daemon=True, args=[self.__shared])
             self.__thread.start()
 
         else:
@@ -1624,7 +1624,7 @@ class d2d():
                                 command_info = d2d.__extractCommandInfo(d2d_map[client][d2d_path][0])
                                 path_info = d2d.__extractPathInfo(d2d_path)
 
-                                command_object = d2dCommand(path_info.mac, path_info.service, path_info.category, path_info.name,
+                                command_object = command(path_info.mac, path_info.service, path_info.category, path_info.name,
                                                             command_info.protocol, command_info.ip, command_info.port, command_info.params,
                                                             command_info.response, command_info.enable, command_info.timeout)
 
@@ -1647,7 +1647,7 @@ class d2d():
         return commands
 
 
-    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=constants.infoProtocol.ASCII) -> d2dInfoWriter:
+    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=constants.infoProtocol.ASCII) -> infoWriter:
 
         # Set defaults
         if category == "":
@@ -1658,14 +1658,14 @@ class d2d():
 
         with self.__registered_mutex:
             if info_path not in self.__info_writer_objects:
-                info_writer = d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+                info_writer = infoWriter(self.__mac, self.__service, category, name, valueType)
                 self.__info_writer_objects[info_path] = weakref.ref(info_writer)
 
             else:
                 info_writer = self.__info_writer_objects[info_path]()
 
                 if not info_writer:
-                    info_writer = d2dInfoWriter(self.__mac, self.__service, category, name, valueType)
+                    info_writer = infoWriter(self.__mac, self.__service, category, name, valueType)
                     self.__info_writer_objects[info_path] = weakref.ref(info_writer)
 
         info_description = {}
@@ -1711,7 +1711,7 @@ class d2d():
                                 info_description = d2d.__extractInfoDescription(d2d_map[client][d2d_path][0])
                                 path_info = d2d.__extractPathInfo(d2d_path)
 
-                                info_reader_object = d2dInfoReader(path_info.mac, path_info.service, path_info.category, path_info.name,
+                                info_reader_object = infoReader(path_info.mac, path_info.service, path_info.category, path_info.name,
                                     info_description.valueType, info_description.ip, info_description.req_port, info_description.update_port)
 
 

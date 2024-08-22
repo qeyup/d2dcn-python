@@ -115,7 +115,7 @@ class Test2_d2dcn(unittest.TestCase):
 
         # Test command info
         test_command = availableCommands[0]
-        self.assertTrue(isinstance(test_command, d2dcn.d2dCommand))
+        self.assertTrue(isinstance(test_command, d2dcn.command))
         self.assertTrue(test_command.mac == test1.mac)
         self.assertTrue(test_command.name == command_name)
         self.assertTrue(test_command.service == test1.service)
