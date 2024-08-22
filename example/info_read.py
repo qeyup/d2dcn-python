@@ -17,7 +17,7 @@ def printInfo(reader_obj, mutex):
             print("[", reader_obj.epoch , "]", reader_obj.mac, "/" , reader_obj.service, "->", reader_obj.name, "=" , reader_obj.value)
 
         else:
-            print("[", reader_obj.epoch , "]", reader_obj.mac, "/" , reader_obj.service, "->", reader_obj.name, "=" , "OFLINE")
+            print("[", reader_obj.epoch , "]", reader_obj.mac, "/" , reader_obj.service, "->", reader_obj.name, "=" , "OFFLINE")
 
 
 def addNewInfo(d2d_object, mutex, mac, service, category, name):
