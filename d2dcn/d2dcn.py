@@ -931,7 +931,7 @@ class d2dInfoReader():
         self.__shared.value = None
         self.__shared.epoch = None
         self.__shared.online = True
-        self.__shared.on_update_callback = None
+        self.__shared.on_update_callback_list = []
         self.__shared.callback_mutex = threading.RLock()
         self.__shared.udp_socket = udpClient(ip, req_port)
         self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, update_port, ip)
@@ -948,14 +948,13 @@ class d2dInfoReader():
 
     def __read_updates_thread(shared):
         while shared.run:
-
             data, ip, port = shared.mcast_socket.read()
             if data != None:
                 shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
                 shared.epoch = int(time.time())
                 with shared.callback_mutex:
-                    if shared.on_update_callback:
-                        shared.on_update_callback()
+                    for callback in shared.on_update_callback_list:
+                        callback()
 
     @property
     def name(self):
@@ -997,16 +996,16 @@ class d2dInfoReader():
         return self.__shared.online
 
 
-    @property
-    def onUpdateValue(self):
+    def addOnUpdateCallback(self, callback):
         with self.__shared.callback_mutex:
-            return self.__shared.on_update_callback
+            if callback not in self.__shared.on_update_callback_list:
+                self.__shared.on_update_callback_list.append(callback)
 
 
-    @onUpdateValue.setter
-    def onUpdateValue(self, callback):
+    def removeOnUpdateCallback(self, callback):
         with self.__shared.callback_mutex:
-            self.__shared.on_update_callback = callback
+            if callback in self.__shared.on_update_callback_list:
+                self.__shared.on_update_callback_list.remove(callback)
 
 
     @property

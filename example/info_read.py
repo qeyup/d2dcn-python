@@ -24,7 +24,7 @@ def addNewInfo(d2d_object, mutex, mac, service, category, name):
     info_reader_objects = d2d_object.getAvailableInfoReaders(mac=mac, service=service, category=category, name=name)
 
     for reader_obj in info_reader_objects:
-        reader_obj.onUpdateValue = lambda reader_obj=reader_obj, mutex=mutex: printInfo(reader_obj, mutex)
+        reader_obj.addOnUpdateCallback(lambda reader_obj=reader_obj, mutex=mutex: printInfo(reader_obj, mutex))
 
 
 def main():
@@ -46,7 +46,7 @@ def main():
 
     # Callback for print updates
     for reader_obj in info_reader_objects:
-        reader_obj.onUpdateValue = lambda reader_obj=reader_obj, mutex=mutex: printInfo(reader_obj, mutex)
+        reader_obj.addOnUpdateCallback(lambda reader_obj=reader_obj, mutex=mutex: printInfo(reader_obj, mutex))
 
 
     # Dead loop
