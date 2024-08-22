@@ -679,7 +679,7 @@ class commandResponse(dict):
         return self.__success
 
 
-class command():
+class commandInterface():
 
     def __init__(self, mac, service, category, name, protocol, ip, port, params, response, enable, timeout, service_info=None):
         self.__name = name
@@ -1066,6 +1066,9 @@ class infoReader():
 class d2d():
 
     def __init__(self, service=None, master=True):
+
+        self.__shared = container()
+
         self.__mac = hex(uuid.getnode()).replace("0x", "")
 
         if service:
@@ -1093,7 +1096,6 @@ class d2d():
         self.__service_used_paths = {}
         self.__info_writer_objects = {}
 
-        self.__shared = container()
         self.__commands = {}
         self.__shared.info_readers = {}
 
@@ -1624,7 +1626,7 @@ class d2d():
                                 command_info = d2d.__extractCommandInfo(d2d_map[client][d2d_path][0])
                                 path_info = d2d.__extractPathInfo(d2d_path)
 
-                                command_object = command(path_info.mac, path_info.service, path_info.category, path_info.name,
+                                command_object = commandInterface(path_info.mac, path_info.service, path_info.category, path_info.name,
                                                             command_info.protocol, command_info.ip, command_info.port, command_info.params,
                                                             command_info.response, command_info.enable, command_info.timeout)
 
