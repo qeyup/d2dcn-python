@@ -1082,8 +1082,8 @@ class d2d():
         self.__command_sockets = []
         self.__service_container = {}
 
-        self.__callback_mutex = threading.RLock()
-        self.__registered_mutex = threading.RLock()
+        self.__shared.__callback_mutex = threading.RLock()
+        self.__shared.__registered_mutex = threading.RLock()
 
         self.__shared.__command_update_callback = None
         self.__shared.__command_remove_callback = None
@@ -1129,72 +1129,72 @@ class d2d():
 
     @property
     def onCommandAdd(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__command_add_callback
 
 
     @onCommandAdd.setter
     def onCommandAdd(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__command_add_callback = callback
 
 
     @property
     def onCommandUpdate(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__command_update_callback
 
 
     @onCommandUpdate.setter
     def onCommandUpdate(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__command_update_callback = callback
 
 
     @property
     def onCommandRemove(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__command_remove_callback
 
 
     @onCommandRemove.setter
     def onCommandRemove(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__command_remove_callback = callback
 
 
     @property
     def onInfoAdd(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__info_added_callback
 
 
     @onInfoAdd.setter
     def onInfoAdd(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__info_added_callback = callback
 
     @property
     def onInfoUpdate(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__info_updated_callback
 
 
     @onInfoUpdate.setter
     def onInfoUpdate(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__info_updated_callback = callback
 
 
     @property
     def onInfoRemove(self):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             return self.__shared.__info_remove_callback
 
 
     @onInfoRemove.setter
     def onInfoRemove(self, callback):
-        with self.__callback_mutex:
+        with self.__shared.__callback_mutex:
             self.__shared.__info_remove_callback = callback
 
 
@@ -1203,7 +1203,7 @@ class d2d():
         path_info = d2d.__extractPathInfo(entry_key)
         if path_info.mode == constants.COMMAND_LEVEL:
 
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 if entry_key in self.__shared.__commands:
                     shared_ptr = self.__shared.__commands[entry_key]()
                     if shared_ptr:
@@ -1211,13 +1211,13 @@ class d2d():
 
 
             # Notify
-            with self.__callback_mutex:
+            with self.__shared.__callback_mutex:
                 if self.__shared.__info_remove_callback:
                     self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
         elif path_info.mode == constants.INFO_LEVEL:
 
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 if entry_key in self.__shared.info_readers:
                     shared_ptr = self.__shared.info_readers[entry_key]()
                     if shared_ptr:
@@ -1225,7 +1225,7 @@ class d2d():
 
 
             # Notify
-            with self.__callback_mutex:
+            with self.__shared.__callback_mutex:
                 if self.__shared.__info_remove_callback:
                     self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
@@ -1238,7 +1238,7 @@ class d2d():
 
             command_info = d2d.__extractCommandInfo(data[0])
 
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 if entry_key in self.__shared.__commands:
                     shared_ptr = self.__shared.__commands[entry_key]()
                     if shared_ptr:
@@ -1247,7 +1247,7 @@ class d2d():
 
 
             # Notify
-            with self.__callback_mutex:
+            with self.__shared.__callback_mutex:
                 if updated:
                     if self.__shared.__command_update_callback:
                         self.__shared.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
@@ -1261,7 +1261,7 @@ class d2d():
 
             info_description = d2d.__extractInfoDescription(data[0])
 
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 if entry_key in self.__shared.info_readers:
                     shared_ptr = self.__shared.info_readers[entry_key]()
                     if shared_ptr:
@@ -1269,7 +1269,7 @@ class d2d():
                         updated = True
 
             # Notify
-            with self.__callback_mutex:
+            with self.__shared.__callback_mutex:
                 if updated:
                     if self.__shared.__info_updated_callback:
                         self.__shared.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
@@ -1608,7 +1608,7 @@ class d2d():
 
         # Get commands from table
         while True:
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 d2d_map = self.__shared_table.geMapData()
                 for client in d2d_map:
                     for d2d_path in d2d_map[client]:
@@ -1658,7 +1658,7 @@ class d2d():
         info_path = d2d.__createPath(self.__mac, self.__service, category, constants.INFO_LEVEL, name)
 
 
-        with self.__registered_mutex:
+        with self.__shared.__registered_mutex:
             if info_path not in self.__info_writer_objects:
                 info_writer = infoWriter(self.__mac, self.__service, category, name, valueType)
                 self.__info_writer_objects[info_path] = weakref.ref(info_writer)
@@ -1695,7 +1695,7 @@ class d2d():
 
         # Get commands from table
         while True:
-            with self.__registered_mutex:
+            with self.__shared.__registered_mutex:
                 d2d_map = self.__shared_table.geMapData()
                 for client in d2d_map:
                     for d2d_path in d2d_map[client]:
