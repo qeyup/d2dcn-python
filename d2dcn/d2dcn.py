@@ -922,21 +922,57 @@ class d2dInfoReader():
 
     def __init__(self,mac, service, category, name, valueType, ip, req_port, update_port):
         self.__shared = container()
-        self.__shared.run = True
         self.__shared.name = name
         self.__shared.mac = mac
         self.__shared.service = service
         self.__shared.category = category
         self.__shared.valueType = valueType
-        self.__shared.value = None
         self.__shared.epoch = None
-        self.__shared.online = True
         self.__shared.on_update_callback_list = []
         self.__shared.callback_mutex = threading.RLock()
-        self.__shared.udp_socket = udpClient(ip, req_port)
-        self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, update_port, ip)
-        self.__thread = threading.Thread(target=d2dInfoReader.__read_updates_thread, daemon=True, args=[self.__shared])
-        self.__thread.start()
+        self.__shared.value_mutex = threading.RLock()
+
+        self.__shared.value = None
+        self.__thread = None
+        self.__shared.udp_socket = None
+        self.__shared.mcast_socket = None
+        self.__shared.run = False
+        self.configure(ip, req_port, update_port)
+
+
+    def configure(self, ip, req_port, update_port):
+
+        self.__shared.run = False
+
+        if self.__shared.udp_socket != None:
+            self.__shared.udp_socket.close()
+
+        if self.__shared.mcast_socket != None:
+            self.__shared.mcast_socket.close()
+
+        if self.__thread != None:
+            self.__thread.join()
+
+        # Lauch thread
+        if ip != None:
+            self.__shared.run = True
+            self.__shared.udp_socket = udpClient(ip, req_port)
+            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, update_port, ip)
+            self.__thread = threading.Thread(target=d2dInfoReader.__read_updates_thread, daemon=True, args=[self.__shared])
+            self.__thread.start()
+
+        else:
+            self.__shared.udp_socket = None
+            self.__shared.mcast_socket = None
+            self.__thread = None
+
+
+            if self.__shared.value != None:
+                self.__shared.value = None
+
+                with self.__shared.callback_mutex:
+                    for callback in self.__shared.on_update_callback_list:
+                            callback()
 
 
     def __del__(self):
@@ -947,14 +983,26 @@ class d2dInfoReader():
 
 
     def __read_updates_thread(shared):
-        while shared.run:
-            data, ip, port = shared.mcast_socket.read()
+
+        with shared.value_mutex:
+            shared.udp_socket.send(d2dConstants.INFO_REQUEST)
+            data = shared.udp_socket.read(timeout=5)
             if data != None:
                 shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
                 shared.epoch = int(time.time())
+
+
+        while shared.run:
+            data, ip, port = shared.mcast_socket.read()
+            if data != None:
+                with shared.value_mutex:
+                    shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
+                    shared.epoch = int(time.time())
+
                 with shared.callback_mutex:
                     for callback in shared.on_update_callback_list:
                         callback()
+
 
     @property
     def name(self):
@@ -993,7 +1041,8 @@ class d2dInfoReader():
 
     @property
     def online(self):
-        return self.__shared.online
+        with self.__shared.value_mutex:
+            return self.value != None
 
 
     def addOnUpdateCallback(self, callback):
@@ -1010,14 +1059,8 @@ class d2dInfoReader():
 
     @property
     def value(self):
-        if self.__shared.value == None:
-            self.__shared.udp_socket.send(d2dConstants.INFO_REQUEST)
-            data = self.__shared.udp_socket.read(timeout=5)
-            if data != None:
-                self.__shared.value = typeTools.convevertFromASCII(data.decode(), self.__shared.valueType)
-                self.__shared.epoch = int(time.time())
-
-        return self.__shared.value
+        with self.__shared.value_mutex:
+            return self.__shared.value
 
 
 class d2d():
@@ -1045,6 +1088,7 @@ class d2d():
 
         self.__info_added_callback = None
         self.__info_remove_callback = None
+        self.__info_updated_callback = None
 
         self.__service_used_paths = {}
         self.__info_writer_objects = {}
@@ -1128,6 +1172,17 @@ class d2d():
         with self.__callback_mutex:
             self.__info_added_callback = callback
 
+    @property
+    def onInfoUpdate(self):
+        with self.__callback_mutex:
+            return self.__info_updated_callback
+
+
+    @onInfoUpdate.setter
+    def onInfoUpdate(self, callback):
+        with self.__callback_mutex:
+            self.__info_updated_callback = callback
+
 
     @property
     def onInfoRemove(self):
@@ -1160,6 +1215,13 @@ class d2d():
 
         elif path_info.mode == d2dConstants.INFO_LEVEL:
 
+            with self.__registered_mutex:
+                if entry_key in self.__shared.info_readers:
+                    shared_ptr = self.__shared.info_readers[entry_key]()
+                    if shared_ptr:
+                        shared_ptr.configure(None, None, None)
+
+
             # Notify
             with self.__callback_mutex:
                 if self.__info_remove_callback:
@@ -1169,22 +1231,22 @@ class d2d():
     def __entryUpdated(self, client_id, entry_key, data):
 
         path_info = d2d.__extractPathInfo(entry_key)
+        updated = False
         if path_info.mode == d2dConstants.COMMAND_LEVEL:
 
             command_info = d2d.__extractCommandInfo(data[0])
-            command_updated = False
 
             with self.__registered_mutex:
                 if entry_key in self.__commands:
                     shared_ptr = self.__commands[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
-                        command_updated = True
+                        updated = True
 
 
             # Notify
             with self.__callback_mutex:
-                if command_updated:
+                if updated:
                     if self.__command_update_callback:
                         self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
@@ -1195,10 +1257,24 @@ class d2d():
 
         elif path_info.mode == d2dConstants.INFO_LEVEL:
 
+            info_description = d2d.__extractInfoDescription(data[0])
+
+            with self.__registered_mutex:
+                if entry_key in self.__shared.info_readers:
+                    shared_ptr = self.__shared.info_readers[entry_key]()
+                    if shared_ptr:
+                        shared_ptr.configure(info_description.ip, info_description.req_port, info_description.update_port)
+                        updated = True
+
             # Notify
             with self.__callback_mutex:
-                if self.__info_added_callback:
-                    self.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                if updated:
+                    if self.__info_updated_callback:
+                        self.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+
+                else:
+                    if self.__info_added_callback:
+                        self.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
