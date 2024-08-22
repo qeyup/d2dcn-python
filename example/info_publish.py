@@ -13,14 +13,14 @@ def main():
 
     d2d_object = d2dcn.d2d(service=sys.argv[1] if len(sys.argv) > 1 else "publish_info_example")
 
-    int_writer = d2d_object.addInfoWriter("int", "example", d2dcn.d2dConstants.valueTypes.INT)
-    float_writer = d2d_object.addInfoWriter("float", "example", d2dcn.d2dConstants.valueTypes.FLOAT)
-    string_writer = d2d_object.addInfoWriter("string", "example", d2dcn.d2dConstants.valueTypes.STRING)
-    bool_writer = d2d_object.addInfoWriter("bool", "example", d2dcn.d2dConstants.valueTypes.BOOL)
-    int_array_writer = d2d_object.addInfoWriter("int_array", "example", d2dcn.d2dConstants.valueTypes.INT_ARRAY)
-    float_array_writer = d2d_object.addInfoWriter("float_array", "example", d2dcn.d2dConstants.valueTypes.FLOAT_ARRAY)
-    string_array_writer = d2d_object.addInfoWriter("string_array", "example", d2dcn.d2dConstants.valueTypes.STRING_ARRAY)
-    bool_array_writer = d2d_object.addInfoWriter("bool_array", "example", d2dcn.d2dConstants.valueTypes.BOOL_ARRAY)
+    int_writer = d2d_object.addInfoWriter("int", "example", d2dcn.constants.valueTypes.INT)
+    float_writer = d2d_object.addInfoWriter("float", "example", d2dcn.constants.valueTypes.FLOAT)
+    string_writer = d2d_object.addInfoWriter("string", "example", d2dcn.constants.valueTypes.STRING)
+    bool_writer = d2d_object.addInfoWriter("bool", "example", d2dcn.constants.valueTypes.BOOL)
+    int_array_writer = d2d_object.addInfoWriter("int_array", "example", d2dcn.constants.valueTypes.INT_ARRAY)
+    float_array_writer = d2d_object.addInfoWriter("float_array", "example", d2dcn.constants.valueTypes.FLOAT_ARRAY)
+    string_array_writer = d2d_object.addInfoWriter("string_array", "example", d2dcn.constants.valueTypes.STRING_ARRAY)
+    bool_array_writer = d2d_object.addInfoWriter("bool_array", "example", d2dcn.constants.valueTypes.BOOL_ARRAY)
 
 
     # Main loop

@@ -31,11 +31,11 @@ def main():
     # Command call 1
     command_args = {}
     command_args[COMMAND_ARG1] = {}
-    command_args[COMMAND_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.BOOL
+    command_args[COMMAND_ARG1][d2dcn.constants.infoField.TYPE] = d2dcn.constants.valueTypes.BOOL
 
     response_args = {}
     response_args[RESPONSE_ARG1] = {}
-    response_args[RESPONSE_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.STRING
+    response_args[RESPONSE_ARG1][d2dcn.constants.infoField.TYPE] = d2dcn.constants.valueTypes.STRING
 
     command1_category = "example"
     command1_name = "command_example1"
@@ -46,11 +46,11 @@ def main():
     # Command call 2
     command_args = {}
     command_args[COMMAND_ARG1] = {}
-    command_args[COMMAND_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.BOOL_ARRAY
+    command_args[COMMAND_ARG1][d2dcn.constants.infoField.TYPE] = d2dcn.constants.valueTypes.BOOL_ARRAY
 
     response_args = {}
     response_args[RESPONSE_ARG1] = {}
-    response_args[RESPONSE_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.STRING_ARRAY
+    response_args[RESPONSE_ARG1][d2dcn.constants.infoField.TYPE] = d2dcn.constants.valueTypes.STRING_ARRAY
 
     command2_category = "example"
     command2_name = "command_example2"

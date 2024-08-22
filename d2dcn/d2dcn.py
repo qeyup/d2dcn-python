@@ -37,7 +37,7 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
 version = "0.5.0"
 
 
-class d2dConstants():
+class constants():
     BROKER_SERVICE_NAME = "D2D_TABLE"
     BROKER_PORT = 18832
     CLIENT_DISCOVER_WAIT = 5
@@ -204,7 +204,7 @@ class udpRandomPortListener():
         current_epoch_time = int(time.time())
         while self.__open:
             try:
-                data, (ip, port) = self.__sock.recvfrom(d2dConstants.MTU)
+                data, (ip, port) = self.__sock.recvfrom(constants.MTU)
                 return data, ip, port
 
             except socket.timeout:
@@ -221,7 +221,7 @@ class udpRandomPortListener():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+        chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
 
         for chn in chn_msg:
             self.__sock.sendto(chn, (ip, port))
@@ -255,7 +255,7 @@ class udpClient():
         current_epoch_time = int(time.time())
         while self.__open:
             try:
-                data = self.__sock.recv(d2dConstants.MTU)
+                data = self.__sock.recv(constants.MTU)
                 return data
 
             except socket.timeout:
@@ -272,7 +272,7 @@ class udpClient():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+        chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
 
         for chn in chn_msg:
             self.__sock.sendto(chn, (self.__remote_ip, self.__remote_port))
@@ -322,7 +322,7 @@ class tcpListener():
             current_epoch_time = int(time.time())
             while self.__open:
                 try:
-                    data = self.__sock.recv(d2dConstants.MTU)
+                    data = self.__sock.recv(constants.MTU)
 
                     if len(data) > 0:
                         return data
@@ -346,7 +346,7 @@ class tcpListener():
             if isinstance(msg, str):
                 msg = msg.encode()
 
-            chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+            chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
 
             try:
                 for chn in chn_msg:
@@ -382,7 +382,7 @@ class tcpListener():
             self.__sock.close()
 
 
-    def __init__(self, port=0, max_connections=d2dConstants.MAX_LISTEN_TCP_SOKETS):
+    def __init__(self, port=0, max_connections=constants.MAX_LISTEN_TCP_SOKETS):
         super().__init__()
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -448,7 +448,7 @@ class tcpClient():
             current_epoch_time = int(time.time())
             while self.__open:
                 try:
-                    data = self.__sock.recv(d2dConstants.MTU)
+                    data = self.__sock.recv(constants.MTU)
                     return data
 
                 except socket.timeout:
@@ -469,7 +469,7 @@ class tcpClient():
             if isinstance(msg, str):
                 msg = msg.encode()
 
-            chn_msg = [msg[idx : idx + d2dConstants.MTU] for idx in range(0, len(msg), d2dConstants.MTU)]
+            chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
             while True:
 
                 try:
@@ -522,16 +522,16 @@ class typeTools():
     def getType(data) -> str:
 
         if isinstance(data, float):
-            return d2dConstants.valueTypes.FLOAT
+            return constants.valueTypes.FLOAT
 
         elif isinstance(data, bool):
-            return d2dConstants.valueTypes.BOOL
+            return constants.valueTypes.BOOL
 
         elif isinstance(data, int):
-            return d2dConstants.valueTypes.INT
+            return constants.valueTypes.INT
 
         elif isinstance(data, str):
-            return d2dConstants.valueTypes.STRING
+            return constants.valueTypes.STRING
 
         elif isinstance(data, list):
 
@@ -547,19 +547,19 @@ class typeTools():
                         return ""
 
             if len(data) == 0:
-                return d2dConstants.valueTypes.ARRAY
+                return constants.valueTypes.ARRAY
             
-            elif detected_type == d2dConstants.valueTypes.FLOAT:
-                return d2dConstants.valueTypes.FLOAT_ARRAY
+            elif detected_type == constants.valueTypes.FLOAT:
+                return constants.valueTypes.FLOAT_ARRAY
 
-            elif detected_type == d2dConstants.valueTypes.BOOL:
-                return d2dConstants.valueTypes.BOOL_ARRAY
+            elif detected_type == constants.valueTypes.BOOL:
+                return constants.valueTypes.BOOL_ARRAY
 
-            elif detected_type == d2dConstants.valueTypes.INT:
-                return d2dConstants.valueTypes.INT_ARRAY
+            elif detected_type == constants.valueTypes.INT:
+                return constants.valueTypes.INT_ARRAY
 
-            elif detected_type == d2dConstants.valueTypes.STRING:
-                return d2dConstants.valueTypes.STRING_ARRAY
+            elif detected_type == constants.valueTypes.STRING:
+                return constants.valueTypes.STRING_ARRAY
 
             else:
                 return ""
@@ -574,7 +574,7 @@ class typeTools():
         if detected_type == field_type:
             return True
 
-        elif detected_type == d2dConstants.valueTypes.ARRAY and d2dConstants.valueTypes.ARRAY in field_type:
+        elif detected_type == constants.valueTypes.ARRAY and constants.valueTypes.ARRAY in field_type:
             return True
         
         else:
@@ -584,33 +584,33 @@ class typeTools():
     def convevertFromASCII(data, data_type):
 
         try:
-            if data_type == d2dConstants.valueTypes.BOOL:
+            if data_type == constants.valueTypes.BOOL:
                 return bool(int(data))
 
-            elif data_type == d2dConstants.valueTypes.INT:
+            elif data_type == constants.valueTypes.INT:
                 return int(data)
 
-            elif data_type == d2dConstants.valueTypes.STRING:
+            elif data_type == constants.valueTypes.STRING:
                 return str(data)
 
-            elif data_type == d2dConstants.valueTypes.FLOAT:
+            elif data_type == constants.valueTypes.FLOAT:
                 return float(data)
 
-            elif data_type == d2dConstants.valueTypes.ARRAY or d2dConstants.valueTypes.ARRAY in data_type:
+            elif data_type == constants.valueTypes.ARRAY or constants.valueTypes.ARRAY in data_type:
                 
                 rl = []
                 aux_list = json.loads(data)
                 for item in aux_list:
-                    if data_type == d2dConstants.valueTypes.BOOL_ARRAY:
+                    if data_type == constants.valueTypes.BOOL_ARRAY:
                         rl.append(bool(item))
 
-                    elif data_type == d2dConstants.valueTypes.INT_ARRAY:
+                    elif data_type == constants.valueTypes.INT_ARRAY:
                         rl.append(int(item))
 
-                    elif data_type == d2dConstants.valueTypes.STRING_ARRAY:
+                    elif data_type == constants.valueTypes.STRING_ARRAY:
                         rl.append(str(item))
 
-                    elif data_type == d2dConstants.valueTypes.FLOAT_ARRAY:
+                    elif data_type == constants.valueTypes.FLOAT_ARRAY:
                         rl.append(float(item))
 
                 return rl
@@ -624,19 +624,19 @@ class typeTools():
 
     def convertToASCII(data, data_type):
         try:
-            if data_type == d2dConstants.valueTypes.BOOL:
+            if data_type == constants.valueTypes.BOOL:
                 return str(1 if data else 0)
 
-            elif data_type == d2dConstants.valueTypes.INT:
+            elif data_type == constants.valueTypes.INT:
                 return str(data)
 
-            elif data_type == d2dConstants.valueTypes.STRING:
+            elif data_type == constants.valueTypes.STRING:
                 return str(data)
 
-            elif data_type == d2dConstants.valueTypes.FLOAT:
+            elif data_type == constants.valueTypes.FLOAT:
                 return str(data)
 
-            elif data_type == d2dConstants.valueTypes.ARRAY or d2dConstants.valueTypes.ARRAY in data_type:
+            elif data_type == constants.valueTypes.ARRAY or constants.valueTypes.ARRAY in data_type:
                 if not isinstance(data, list):
                     return None
 
@@ -666,7 +666,7 @@ class d2dCommandResponse(dict):
             if isinstance(str_response, str):
                 self.__error = str_response
             else:
-                self.__error = d2dConstants.commandErrorMsg.EXCEPTION_ERROR
+                self.__error = constants.commandErrorMsg.EXCEPTION_ERROR
             self.__success = False
 
     @property
@@ -701,10 +701,10 @@ class d2dCommand():
         self.__timeout = timeout
 
         if enable:
-            if protocol == d2dConstants.commandProtocol.JSON_UDP:
+            if protocol == constants.commandProtocol.JSON_UDP:
                 self.__socket = udpClient(ip, port)
 
-            elif protocol == d2dConstants.commandProtocol.JSON_TCP:
+            elif protocol == constants.commandProtocol.JSON_TCP:
                 self.__socket = tcpClient(ip, port)
 
             else:
@@ -759,10 +759,10 @@ class d2dCommand():
             timeout = self.__timeout
 
         if self.__socket == None:
-            return d2dCommandResponse(d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR)
+            return d2dCommandResponse(constants.commandErrorMsg.NOT_ENABLE_ERROR)
 
         try:
-            response = d2dConstants.commandErrorMsg.CONNECTION_ERROR
+            response = constants.commandErrorMsg.CONNECTION_ERROR
             self.__socket.send(json.dumps(args, indent=1))
             socket_response = self.__socket.read(timeout)
             if socket_response:
@@ -774,7 +774,7 @@ class d2dCommand():
                     else:
                         break
             else:
-                response = d2dConstants.commandErrorMsg.TIMEOUT_ERROR
+                response = constants.commandErrorMsg.TIMEOUT_ERROR
 
         except:
             pass
@@ -798,23 +798,23 @@ class d2dInfoWriter():
         self.__shared.valueType = valueType
 
 
-        if valueType == d2dConstants.valueTypes.BOOL or valueType == d2dConstants.valueTypes.BOOL_ARRAY:
+        if valueType == constants.valueTypes.BOOL or valueType == constants.valueTypes.BOOL_ARRAY:
             self.__shared.default_value = bool()
 
-        elif valueType == d2dConstants.valueTypes.INT or valueType == d2dConstants.valueTypes.INT_ARRAY:
+        elif valueType == constants.valueTypes.INT or valueType == constants.valueTypes.INT_ARRAY:
             self.__shared.default_value = int()
 
-        elif valueType == d2dConstants.valueTypes.STRING or valueType == d2dConstants.valueTypes.STRING_ARRAY:
+        elif valueType == constants.valueTypes.STRING or valueType == constants.valueTypes.STRING_ARRAY:
             self.__shared.default_value = str()
 
-        elif valueType == d2dConstants.valueTypes.FLOAT or valueType == d2dConstants.valueTypes.FLOAT_ARRAY:
+        elif valueType == constants.valueTypes.FLOAT or valueType == constants.valueTypes.FLOAT_ARRAY:
             self.__shared.default_value = float()
 
         else:
             self.__shared.default_value = None
 
 
-        if valueType.endswith(d2dConstants.valueTypes.ARRAY):
+        if valueType.endswith(constants.valueTypes.ARRAY):
             self.__shared.value = []
 
         else:
@@ -823,7 +823,7 @@ class d2dInfoWriter():
 
         if self.__shared.default_value != None:
             self.__shared.udp_socket = udpRandomPortListener()
-            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP)
+            self.__shared.mcast_socket = mcast(constants.INFO_MULTICAST_GROUP)
             self.__thread = threading.Thread(target=d2dInfoWriter.__listetenUpdateReq, daemon=True, args=[self.__shared])
             self.__thread.start()
 
@@ -914,7 +914,7 @@ class d2dInfoWriter():
 
         while shared.run:
             data, ip, port = shared.udp_socket.read()
-            if data == d2dConstants.INFO_REQUEST:
+            if data == constants.INFO_REQUEST:
                 shared.udp_socket.send(ip, port, typeTools.convertToASCII(shared.value, shared.valueType))
 
 
@@ -957,7 +957,7 @@ class d2dInfoReader():
         if ip != None:
             self.__shared.run = True
             self.__shared.udp_socket = udpClient(ip, req_port)
-            self.__shared.mcast_socket = mcast(d2dConstants.INFO_MULTICAST_GROUP, update_port, ip)
+            self.__shared.mcast_socket = mcast(constants.INFO_MULTICAST_GROUP, update_port, ip)
             self.__thread = threading.Thread(target=d2dInfoReader.__read_updates_thread, daemon=True, args=[self.__shared])
             self.__thread.start()
 
@@ -985,7 +985,7 @@ class d2dInfoReader():
     def __read_updates_thread(shared):
 
         with shared.value_mutex:
-            shared.udp_socket.send(d2dConstants.INFO_REQUEST)
+            shared.udp_socket.send(constants.INFO_REQUEST)
             data = shared.udp_socket.read(timeout=5)
             if data != None:
                 shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
@@ -1097,7 +1097,7 @@ class d2d():
         self.__commands = {}
         self.__shared.info_readers = {}
 
-        self.__shared_table = SharedTableBroker.SharedTableBroker(d2dConstants.BROKER_SERVICE_NAME, master)
+        self.__shared_table = SharedTableBroker.SharedTableBroker(constants.BROKER_SERVICE_NAME, master)
         self.__shared_table.onRemoveTableEntry = self.__entryRemoved
         self.__shared_table.onNewTableEntry = self.__entryUpdated
         self.__shared_table.onUpdateTableEntry = self.__entryUpdated
@@ -1199,7 +1199,7 @@ class d2d():
     def __entryRemoved(self, client_id, entry_key):
 
         path_info = d2d.__extractPathInfo(entry_key)
-        if path_info.mode == d2dConstants.COMMAND_LEVEL:
+        if path_info.mode == constants.COMMAND_LEVEL:
 
             with self.__registered_mutex:
                 if entry_key in self.__commands:
@@ -1213,7 +1213,7 @@ class d2d():
                 if self.__info_remove_callback:
                     self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
-        elif path_info.mode == d2dConstants.INFO_LEVEL:
+        elif path_info.mode == constants.INFO_LEVEL:
 
             with self.__registered_mutex:
                 if entry_key in self.__shared.info_readers:
@@ -1232,7 +1232,7 @@ class d2d():
 
         path_info = d2d.__extractPathInfo(entry_key)
         updated = False
-        if path_info.mode == d2dConstants.COMMAND_LEVEL:
+        if path_info.mode == constants.COMMAND_LEVEL:
 
             command_info = d2d.__extractCommandInfo(data[0])
 
@@ -1255,7 +1255,7 @@ class d2d():
                         self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
-        elif path_info.mode == d2dConstants.INFO_LEVEL:
+        elif path_info.mode == constants.INFO_LEVEL:
 
             info_description = d2d.__extractInfoDescription(data[0])
 
@@ -1279,10 +1279,10 @@ class d2d():
 
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
 
-        if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
+        if mode not in [constants.COMMAND_LEVEL, constants.INFO_LEVEL]:
             return None
 
-        path = d2dConstants.PREFIX + "/"
+        path = constants.PREFIX + "/"
         path += mac + "/"
         path += service + "/"
         path += mode + "/"
@@ -1294,10 +1294,10 @@ class d2d():
 
     def __createRegexPath(self, mac, service, category, mode, name) -> str:
 
-        if mode not in [d2dConstants.COMMAND_LEVEL, d2dConstants.INFO_LEVEL]:
+        if mode not in [constants.COMMAND_LEVEL, constants.INFO_LEVEL]:
             return ""
 
-        regex_path = d2dConstants.MQTT_PREFIX + "/"
+        regex_path = constants.MQTT_PREFIX + "/"
 
         if mac != "":
             regex_path += mac + "/"
@@ -1328,13 +1328,13 @@ class d2d():
 
     def __checkInOutDefinedField(field) -> bool:
 
-        if d2dConstants.field.TYPE not in field:
+        if constants.field.TYPE not in field:
             return False
 
-        elif not isinstance(field[d2dConstants.field.TYPE], str):
+        elif not isinstance(field[constants.field.TYPE], str):
             return False
 
-        elif d2dConstants.field.OPTIONAL in field and not isinstance(field[d2dConstants.field.OPTIONAL], bool):
+        elif constants.field.OPTIONAL in field and not isinstance(field[constants.field.OPTIONAL], bool):
             return False
 
         return True
@@ -1346,13 +1346,13 @@ class d2d():
         for field in data_dict:
             if field not in prototipe_dict:
                 return False
-            if not typeTools.checkFieldType(data_dict[field], prototipe_dict[field][d2dConstants.field.TYPE]):
+            if not typeTools.checkFieldType(data_dict[field], prototipe_dict[field][constants.field.TYPE]):
                 return False
 
         # Check optional
         for field in prototipe_dict:
             field_prototipe = prototipe_dict[field]
-            mandatory = d2dConstants.field.OPTIONAL not in field_prototipe or not field_prototipe[d2dConstants.field.OPTIONAL]
+            mandatory = constants.field.OPTIONAL not in field_prototipe or not field_prototipe[constants.field.OPTIONAL]
             if field not in data_dict and mandatory:
                 return False
 
@@ -1366,17 +1366,17 @@ class d2d():
                 args = json.loads(request)
 
             except:
-                return d2dConstants.commandErrorMsg.BAD_INPUT
+                return constants.commandErrorMsg.BAD_INPUT
 
 
             # Ignore if disable
-            if not service_container.map[d2dConstants.commandField.ENABLE]:
-                return d2dConstants.commandErrorMsg.NOT_ENABLE_ERROR
+            if not service_container.map[constants.commandField.ENABLE]:
+                return constants.commandErrorMsg.NOT_ENABLE_ERROR
 
 
             # Check args
             if not d2d.__checkInOutField(args, input_params):
-                return d2dConstants.commandErrorMsg.BAD_INPUT
+                return constants.commandErrorMsg.BAD_INPUT
 
 
             # Call command
@@ -1385,7 +1385,7 @@ class d2d():
 
                 # Check args
                 if not d2d.__checkInOutField(response_dict, output_params):
-                    return d2dConstants.commandErrorMsg.BAD_OUTPUT
+                    return constants.commandErrorMsg.BAD_OUTPUT
 
                 else:
                     # map -> json
@@ -1393,7 +1393,7 @@ class d2d():
                     return response
 
             else:
-                return d2dConstants.commandErrorMsg.CALLBACK_ERROR
+                return constants.commandErrorMsg.CALLBACK_ERROR
 
 
     def __udpListenerThread(socket, service_container, command_callback, input_params, output_params):
@@ -1456,13 +1456,13 @@ class d2d():
         try:
             command_info = json.loads(data)
             rc = container()
-            rc.protocol = command_info[d2dConstants.commandField.PROTOCOL]
-            rc.ip = command_info[d2dConstants.commandField.IP]
-            rc.port = command_info[d2dConstants.commandField.PORT]
-            rc.params = command_info[d2dConstants.commandField.INPUT]
-            rc.response = command_info[d2dConstants.commandField.OUTPUT]
-            rc.enable = True if d2dConstants.commandField.ENABLE not in command_info else command_info[d2dConstants.commandField.ENABLE]
-            rc.timeout = 5 if d2dConstants.commandField.TIMEOUT not in command_info else command_info[d2dConstants.commandField.TIMEOUT]
+            rc.protocol = command_info[constants.commandField.PROTOCOL]
+            rc.ip = command_info[constants.commandField.IP]
+            rc.port = command_info[constants.commandField.PORT]
+            rc.params = command_info[constants.commandField.INPUT]
+            rc.response = command_info[constants.commandField.OUTPUT]
+            rc.enable = True if constants.commandField.ENABLE not in command_info else command_info[constants.commandField.ENABLE]
+            rc.timeout = 5 if constants.commandField.TIMEOUT not in command_info else command_info[constants.commandField.TIMEOUT]
             return rc
 
         except:
@@ -1474,11 +1474,11 @@ class d2d():
         try:
             command_info = json.loads(data)
             rc = container()
-            rc.protocol = command_info[d2dConstants.infoField.PROTOCOL]
-            rc.ip = command_info[d2dConstants.infoField.IP]
-            rc.req_port = command_info[d2dConstants.infoField.REQUEST_PORT]
-            rc.update_port = command_info[d2dConstants.infoField.UPDATE_PORT]
-            rc.valueType = command_info[d2dConstants.infoField.TYPE]
+            rc.protocol = command_info[constants.infoField.PROTOCOL]
+            rc.ip = command_info[constants.infoField.IP]
+            rc.req_port = command_info[constants.infoField.REQUEST_PORT]
+            rc.update_port = command_info[constants.infoField.UPDATE_PORT]
+            rc.valueType = command_info[constants.infoField.TYPE]
 
             return rc
 
@@ -1495,7 +1495,7 @@ class d2d():
         rc = container()
 
         rc.prefix = path_split[0]
-        if rc.prefix != d2dConstants.PREFIX:
+        if rc.prefix != constants.PREFIX:
             return
 
         rc.mac = path_split[1]
@@ -1523,7 +1523,7 @@ class d2d():
             return ""
 
 
-    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5, protocol=d2dConstants.commandProtocol.JSON_UDP)-> bool:
+    def addServiceCommand(self, cmdCallback, name:str, input_params:dict, output_params:dict, category:str="", enable=True, timeout=5, protocol=constants.commandProtocol.JSON_UDP)-> bool:
 
         # Checks
         if not cmdCallback:
@@ -1540,7 +1540,7 @@ class d2d():
 
         # Set defaults
         if category == "":
-            category = d2dConstants.category.GENERIC
+            category = constants.category.GENERIC
 
 
         # Check if already registered
@@ -1552,14 +1552,14 @@ class d2d():
         self.__service_container[name] = container()
         self.__service_container[name].run = True
 
-        if protocol == d2dConstants.commandProtocol.JSON_UDP:
+        if protocol == constants.commandProtocol.JSON_UDP:
             listen_socket = udpRandomPortListener()
             self.__command_sockets.append(listen_socket)
             thread = threading.Thread(target=d2d.__udpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
             thread.start()
             self.__threads.append(thread)
 
-        elif protocol == d2dConstants.commandProtocol.JSON_TCP:
+        elif protocol == constants.commandProtocol.JSON_TCP:
             listen_socket = tcpListener()
             self.__command_sockets.append(listen_socket)
             thread = threading.Thread(target=d2d.__tcpListenerThread, daemon=True, args=[listen_socket, self.__service_container[name], cmdCallback, input_params, output_params])
@@ -1571,20 +1571,20 @@ class d2d():
 
 
         # Register command
-        command_path = d2d.__createPath(self.__mac, self.__service, category, d2dConstants.COMMAND_LEVEL, name)
+        command_path = d2d.__createPath(self.__mac, self.__service, category, constants.COMMAND_LEVEL, name)
         if not command_path:
             return False
 
         self.__service_used_paths[name] = command_path
 
         self.__service_container[name].map = {}
-        self.__service_container[name].map[d2dConstants.commandField.PROTOCOL] = protocol
-        self.__service_container[name].map[d2dConstants.commandField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
-        self.__service_container[name].map[d2dConstants.commandField.PORT] = listen_socket.port
-        self.__service_container[name].map[d2dConstants.commandField.INPUT] = input_params
-        self.__service_container[name].map[d2dConstants.commandField.OUTPUT] = output_params
-        self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
-        self.__service_container[name].map[d2dConstants.commandField.TIMEOUT] = timeout
+        self.__service_container[name].map[constants.commandField.PROTOCOL] = protocol
+        self.__service_container[name].map[constants.commandField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
+        self.__service_container[name].map[constants.commandField.PORT] = listen_socket.port
+        self.__service_container[name].map[constants.commandField.INPUT] = input_params
+        self.__service_container[name].map[constants.commandField.OUTPUT] = output_params
+        self.__service_container[name].map[constants.commandField.ENABLE] = enable
+        self.__service_container[name].map[constants.commandField.TIMEOUT] = timeout
 
         return self.__shared_table.updateTableEntry(self.__service_used_paths[name], [json.dumps(self.__service_container[name].map)])
 
@@ -1593,13 +1593,13 @@ class d2d():
         if name not in self.__service_container:
             return False
 
-        self.__service_container[name].map[d2dConstants.commandField.ENABLE] = enable
+        self.__service_container[name].map[constants.commandField.ENABLE] = enable
         return self.__shared_table.updateTableEntry(self.__service_used_paths[name], [json.dumps(self.__service_container[name].map)])
 
 
     def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="", wait:int=0) -> list:
 
-        search_command_path = self.__createRegexPath(mac, service, category, d2dConstants.COMMAND_LEVEL, command)
+        search_command_path = self.__createRegexPath(mac, service, category, constants.COMMAND_LEVEL, command)
 
         commands = []
         start = time.time()
@@ -1647,13 +1647,13 @@ class d2d():
         return commands
 
 
-    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=d2dConstants.infoProtocol.ASCII) -> d2dInfoWriter:
+    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=constants.infoProtocol.ASCII) -> d2dInfoWriter:
 
         # Set defaults
         if category == "":
-            category = d2dConstants.category.GENERIC
+            category = constants.category.GENERIC
 
-        info_path = d2d.__createPath(self.__mac, self.__service, category, d2dConstants.INFO_LEVEL, name)
+        info_path = d2d.__createPath(self.__mac, self.__service, category, constants.INFO_LEVEL, name)
 
 
         with self.__registered_mutex:
@@ -1669,11 +1669,11 @@ class d2d():
                     self.__info_writer_objects[info_path] = weakref.ref(info_writer)
 
         info_description = {}
-        info_description[d2dConstants.infoField.PROTOCOL] = protocol
-        info_description[d2dConstants.infoField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
-        info_description[d2dConstants.infoField.REQUEST_PORT] = info_writer.requestPort
-        info_description[d2dConstants.infoField.UPDATE_PORT] = info_writer.updatePort
-        info_description[d2dConstants.infoField.TYPE] = valueType
+        info_description[constants.infoField.PROTOCOL] = protocol
+        info_description[constants.infoField.IP] = self.__getOwnIP(self.__shared_table.masterIP())
+        info_description[constants.infoField.REQUEST_PORT] = info_writer.requestPort
+        info_description[constants.infoField.UPDATE_PORT] = info_writer.updatePort
+        info_description[constants.infoField.TYPE] = valueType
 
 
         if self.__shared_table.updateTableEntry(info_path, [json.dumps(info_description)]):
@@ -1686,7 +1686,7 @@ class d2d():
     def getAvailableInfoReaders(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
 
 
-        search_info_path = self.__createRegexPath(mac, service, category, d2dConstants.INFO_LEVEL, name)
+        search_info_path = self.__createRegexPath(mac, service, category, constants.INFO_LEVEL, name)
 
         info_reader_objs = []
         start = time.time()
