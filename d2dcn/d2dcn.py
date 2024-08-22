@@ -1100,9 +1100,9 @@ class d2d():
         self.__shared.info_readers = {}
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(constants.BROKER_SERVICE_NAME, master)
-        self.__shared_table.onRemoveTableEntry = self.__entryRemoved
-        self.__shared_table.onNewTableEntry = self.__entryUpdated
-        self.__shared_table.onUpdateTableEntry = self.__entryUpdated
+        self.__shared_table.onRemoveTableEntry = lambda client_id, entry_key, shared=self.__shared : d2d.__entryRemoved(client_id, entry_key, shared)
+        self.__shared_table.onNewTableEntry = lambda client_id, entry_key, data, shared=self.__shared : d2d.__entryUpdated(client_id, entry_key, data, shared)
+        self.__shared_table.onUpdateTableEntry = lambda client_id, entry_key, data, shared=self.__shared : d2d.__entryUpdated(client_id, entry_key, data, shared)
 
 
     def __del__(self):
@@ -1198,39 +1198,39 @@ class d2d():
             self.__shared.__info_remove_callback = callback
 
 
-    def __entryRemoved(self, client_id, entry_key):
+    def __entryRemoved(client_id, entry_key, shared):
 
         path_info = d2d.__extractPathInfo(entry_key)
         if path_info.mode == constants.COMMAND_LEVEL:
 
-            with self.__shared.__registered_mutex:
-                if entry_key in self.__shared.__commands:
-                    shared_ptr = self.__shared.__commands[entry_key]()
+            with shared.__registered_mutex:
+                if entry_key in shared.__commands:
+                    shared_ptr = shared.__commands[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(False)
 
 
             # Notify
-            with self.__shared.__callback_mutex:
-                if self.__shared.__info_remove_callback:
-                    self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+            with shared.__callback_mutex:
+                if shared.__info_remove_callback:
+                    shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
         elif path_info.mode == constants.INFO_LEVEL:
 
-            with self.__shared.__registered_mutex:
-                if entry_key in self.__shared.info_readers:
-                    shared_ptr = self.__shared.info_readers[entry_key]()
+            with shared.__registered_mutex:
+                if entry_key in shared.info_readers:
+                    shared_ptr = shared.info_readers[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(None, None, None)
 
 
             # Notify
-            with self.__shared.__callback_mutex:
-                if self.__shared.__info_remove_callback:
-                    self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+            with shared.__callback_mutex:
+                if shared.__info_remove_callback:
+                    shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
-    def __entryUpdated(self, client_id, entry_key, data):
+    def __entryUpdated(client_id, entry_key, data, shared):
 
         path_info = d2d.__extractPathInfo(entry_key)
         updated = False
@@ -1238,45 +1238,45 @@ class d2d():
 
             command_info = d2d.__extractCommandInfo(data[0])
 
-            with self.__shared.__registered_mutex:
-                if entry_key in self.__shared.__commands:
-                    shared_ptr = self.__shared.__commands[entry_key]()
+            with shared.__registered_mutex:
+                if entry_key in shared.__commands:
+                    shared_ptr = shared.__commands[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
                         updated = True
 
 
             # Notify
-            with self.__shared.__callback_mutex:
+            with shared.__callback_mutex:
                 if updated:
-                    if self.__shared.__command_update_callback:
-                        self.__shared.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if shared.__command_update_callback:
+                        shared.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
                 else:
-                    if self.__shared.__command_add_callback:
-                        self.__shared.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if shared.__command_add_callback:
+                        shared.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
         elif path_info.mode == constants.INFO_LEVEL:
 
             info_description = d2d.__extractInfoDescription(data[0])
 
-            with self.__shared.__registered_mutex:
-                if entry_key in self.__shared.info_readers:
-                    shared_ptr = self.__shared.info_readers[entry_key]()
+            with shared.__registered_mutex:
+                if entry_key in shared.info_readers:
+                    shared_ptr = shared.info_readers[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(info_description.ip, info_description.req_port, info_description.update_port)
                         updated = True
 
             # Notify
-            with self.__shared.__callback_mutex:
+            with shared.__callback_mutex:
                 if updated:
-                    if self.__shared.__info_updated_callback:
-                        self.__shared.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if shared.__info_updated_callback:
+                        shared.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
                 else:
-                    if self.__shared.__info_added_callback:
-                        self.__shared.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if shared.__info_added_callback:
+                        shared.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
