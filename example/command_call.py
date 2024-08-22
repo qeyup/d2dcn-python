@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import sys
 import os
 sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
@@ -57,4 +59,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except:
+        pass

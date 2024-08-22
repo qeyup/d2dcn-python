@@ -8,4 +8,28 @@ MAIN USAGES
 - Get updates of information about device services.
 
 
-* [MQTT data structure](doc/MQTT_data_structure.md)
+# Examples
+
+## Register command
+
+```bash
+sudo docker run -it --rm -v $PWD:/home/docker/workspace d2dcn_dwi workspace/example/command_publish.py
+```
+
+## Call command
+
+```bash
+sudo docker run -it --rm -v $PWD:/home/docker/workspace d2dcn_dwi workspace/example/command_call.py
+```
+
+## Publish info
+
+```bash
+sudo docker run -it --rm -v $PWD:/home/docker/workspace d2dcn_dwi workspace/example/info_publish.py
+```
+
+## Read info
+
+```bash
+sudo docker run -it --rm -v $PWD:/home/docker/workspace d2dcn_dwi workspace/example/info_read.py
+```
