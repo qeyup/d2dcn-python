@@ -1085,18 +1085,18 @@ class d2d():
         self.__callback_mutex = threading.RLock()
         self.__registered_mutex = threading.RLock()
 
-        self.__command_update_callback = None
-        self.__command_remove_callback = None
-        self.__command_add_callback = None
+        self.__shared.__command_update_callback = None
+        self.__shared.__command_remove_callback = None
+        self.__shared.__command_add_callback = None
 
-        self.__info_added_callback = None
-        self.__info_remove_callback = None
-        self.__info_updated_callback = None
+        self.__shared.__info_added_callback = None
+        self.__shared.__info_remove_callback = None
+        self.__shared.__info_updated_callback = None
 
         self.__service_used_paths = {}
         self.__info_writer_objects = {}
 
-        self.__commands = {}
+        self.__shared.__commands = {}
         self.__shared.info_readers = {}
 
         self.__shared_table = SharedTableBroker.SharedTableBroker(constants.BROKER_SERVICE_NAME, master)
@@ -1130,72 +1130,72 @@ class d2d():
     @property
     def onCommandAdd(self):
         with self.__callback_mutex:
-            return self.__command_add_callback
+            return self.__shared.__command_add_callback
 
 
     @onCommandAdd.setter
     def onCommandAdd(self, callback):
         with self.__callback_mutex:
-            self.__command_add_callback = callback
+            self.__shared.__command_add_callback = callback
 
 
     @property
     def onCommandUpdate(self):
         with self.__callback_mutex:
-            return self.__command_update_callback
+            return self.__shared.__command_update_callback
 
 
     @onCommandUpdate.setter
     def onCommandUpdate(self, callback):
         with self.__callback_mutex:
-            self.__command_update_callback = callback
+            self.__shared.__command_update_callback = callback
 
 
     @property
     def onCommandRemove(self):
         with self.__callback_mutex:
-            return self.__command_remove_callback
+            return self.__shared.__command_remove_callback
 
 
     @onCommandRemove.setter
     def onCommandRemove(self, callback):
         with self.__callback_mutex:
-            self.__command_remove_callback = callback
+            self.__shared.__command_remove_callback = callback
 
 
     @property
     def onInfoAdd(self):
         with self.__callback_mutex:
-            return self.__info_added_callback
+            return self.__shared.__info_added_callback
 
 
     @onInfoAdd.setter
     def onInfoAdd(self, callback):
         with self.__callback_mutex:
-            self.__info_added_callback = callback
+            self.__shared.__info_added_callback = callback
 
     @property
     def onInfoUpdate(self):
         with self.__callback_mutex:
-            return self.__info_updated_callback
+            return self.__shared.__info_updated_callback
 
 
     @onInfoUpdate.setter
     def onInfoUpdate(self, callback):
         with self.__callback_mutex:
-            self.__info_updated_callback = callback
+            self.__shared.__info_updated_callback = callback
 
 
     @property
     def onInfoRemove(self):
         with self.__callback_mutex:
-            return self.__info_remove_callback
+            return self.__shared.__info_remove_callback
 
 
     @onInfoRemove.setter
     def onInfoRemove(self, callback):
         with self.__callback_mutex:
-            self.__info_remove_callback = callback
+            self.__shared.__info_remove_callback = callback
 
 
     def __entryRemoved(self, client_id, entry_key):
@@ -1204,16 +1204,16 @@ class d2d():
         if path_info.mode == constants.COMMAND_LEVEL:
 
             with self.__registered_mutex:
-                if entry_key in self.__commands:
-                    shared_ptr = self.__commands[entry_key]()
+                if entry_key in self.__shared.__commands:
+                    shared_ptr = self.__shared.__commands[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(False)
 
 
             # Notify
             with self.__callback_mutex:
-                if self.__info_remove_callback:
-                    self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                if self.__shared.__info_remove_callback:
+                    self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
         elif path_info.mode == constants.INFO_LEVEL:
 
@@ -1226,8 +1226,8 @@ class d2d():
 
             # Notify
             with self.__callback_mutex:
-                if self.__info_remove_callback:
-                    self.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                if self.__shared.__info_remove_callback:
+                    self.__shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __entryUpdated(self, client_id, entry_key, data):
@@ -1239,8 +1239,8 @@ class d2d():
             command_info = d2d.__extractCommandInfo(data[0])
 
             with self.__registered_mutex:
-                if entry_key in self.__commands:
-                    shared_ptr = self.__commands[entry_key]()
+                if entry_key in self.__shared.__commands:
+                    shared_ptr = self.__shared.__commands[entry_key]()
                     if shared_ptr:
                         shared_ptr.configure(command_info.enable, command_info.params, command_info.response, command_info.protocol, command_info.ip, command_info.port, command_info.timeout)
                         updated = True
@@ -1249,12 +1249,12 @@ class d2d():
             # Notify
             with self.__callback_mutex:
                 if updated:
-                    if self.__command_update_callback:
-                        self.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if self.__shared.__command_update_callback:
+                        self.__shared.__command_update_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
                 else:
-                    if self.__command_add_callback:
-                        self.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if self.__shared.__command_add_callback:
+                        self.__shared.__command_add_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
         elif path_info.mode == constants.INFO_LEVEL:
@@ -1271,12 +1271,12 @@ class d2d():
             # Notify
             with self.__callback_mutex:
                 if updated:
-                    if self.__info_updated_callback:
-                        self.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if self.__shared.__info_updated_callback:
+                        self.__shared.__info_updated_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
                 else:
-                    if self.__info_added_callback:
-                        self.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                    if self.__shared.__info_added_callback:
+                        self.__shared.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
     def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
@@ -1615,8 +1615,8 @@ class d2d():
                         if re.search(search_command_path, d2d_path):
 
                             # Command already setup
-                            if d2d_path in self.__commands:
-                                command_object = self.__commands[d2d_path]()
+                            if d2d_path in self.__shared.__commands:
+                                command_object = self.__shared.__commands[d2d_path]()
 
                             else:
                                 command_object = None
@@ -1632,7 +1632,7 @@ class d2d():
 
 
                                 # Save weak reference
-                                self.__commands[d2d_path] = weakref.ref(command_object)
+                                self.__shared.__commands[d2d_path] = weakref.ref(command_object)
 
                             # Append to list
                             commands.append(command_object)
