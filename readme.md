@@ -8,7 +8,7 @@ MAIN USAGES
 - Get updates of information about device services.
 
 
-# Examples
+# Examples (Using docker d2dcn_dwi image)
 
 ## Register command
 
