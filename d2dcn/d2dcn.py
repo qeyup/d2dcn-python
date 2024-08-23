@@ -649,6 +649,19 @@ class typeTools():
             return None
 
 
+class commandArgsDef(dict):
+
+    def __init__(self):
+        super().__init__()
+
+
+    def add(self, arg_name:str, arg_type:str, optional:bool=False):
+        self[arg_name] = {}
+        self[arg_name][constants.field.TYPE] = arg_type
+        if optional:
+            self[arg_name][constants.field.OPTIONAL] = optional
+
+
 class commandResponse(dict):
 
     def __init__(self, str_response):
@@ -681,7 +694,8 @@ class commandResponse(dict):
 
 class commandInterface():
 
-    def __init__(self, mac, service, category, name, protocol, ip, port, params, response, enable, timeout, service_info=None):
+    def __init__(self, mac:str, service:str, category:str, name:str, protocol:str, ip:str, 
+        port:int, params:commandArgsDef, response:commandArgsDef, enable:bool, timeout:int):
         self.__name = name
         self.__mac = mac
         self.__service = service
