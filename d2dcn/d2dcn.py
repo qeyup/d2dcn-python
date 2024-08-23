@@ -991,9 +991,15 @@ class infoReader():
 
     def __del__(self):
         self.__shared.run = False
-        self.__shared.mcast_socket.close()
-        self.__shared.udp_socket.close()
-        self.__thread.join()
+
+        if self.__shared.udp_socket != None:
+            self.__shared.udp_socket.close()
+
+        if self.__shared.mcast_socket != None:
+            self.__shared.mcast_socket.close()
+
+        if self.__thread != None:
+            self.__thread.join()
 
 
     def __read_updates_thread(shared):
@@ -1613,9 +1619,9 @@ class d2d():
         return self.__shared_table.updateTableEntry(self.__service_used_paths[name], [json.dumps(self.__service_container[name].map)])
 
 
-    def getAvailableComands(self, mac:str="", service:str="", category:str="", command:str="", wait:int=0) -> list:
+    def getAvailableComands(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
 
-        search_command_path = self.__createRegexPath(mac, service, category, constants.COMMAND_LEVEL, command)
+        search_command_path = self.__createRegexPath(mac, service, category, constants.COMMAND_LEVEL, name)
 
         commands = []
         start = time.time()
@@ -1663,7 +1669,7 @@ class d2d():
         return commands
 
 
-    def addInfoWriter(self, name:str, category:str, valueType:str, protocol:str=constants.infoProtocol.ASCII) -> infoWriter:
+    def addInfoWriter(self, name:str, valueType:str, category:str="", protocol:str=constants.infoProtocol.ASCII) -> infoWriter:
 
         # Set defaults
         if category == "":
