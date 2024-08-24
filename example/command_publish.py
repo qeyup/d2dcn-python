@@ -5,6 +5,7 @@ import os
 sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 
 import d2dcn
+import traceback
 
 
 COMMAND_ARG1 = "command_arg1"
@@ -76,4 +77,4 @@ if __name__ == '__main__':
         main()
 
     except:
-        pass
+        print(traceback.format_exc())

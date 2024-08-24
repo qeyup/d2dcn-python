@@ -6,6 +6,7 @@ sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 
 import d2dcn
 import time
+import traceback
 
 
 COMMAND_ARG1 = "command_arg1"
@@ -24,12 +25,12 @@ def main():
 
 
     # Get available comand example 1
-    found_commands1 = d2d_object.getAvailableComands(command="command_example1", wait=5)
+    found_commands1 = d2d_object.getAvailableComands(name="command_example1", wait=5)
     print("Found", len(found_commands1), "example1 commands")
 
 
     # Get available comand example 2
-    found_commands2 = d2d_object.getAvailableComands(command="command_example2", wait=5)
+    found_commands2 = d2d_object.getAvailableComands(name="command_example2", wait=5)
     print("Found", len(found_commands2), "example2 commands")
 
 
@@ -61,5 +62,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+
     except:
-        pass
+        print(traceback.format_exc())

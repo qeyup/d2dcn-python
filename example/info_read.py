@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 import d2dcn
 import time
 import threading
+import traceback
 
 
 class container():
@@ -23,7 +24,7 @@ def printInfo(reader_obj, mutex):
 
 
 def addNewInfo(d2d_object, mutex, mac, service, category, name):
-    info_reader_objects = d2d_object.getAvailableInfoReaders(mac=mac, service=service, category=category, name=name)
+    info_reader_objects = d2d_object.getAvailableInfoReaders(name=name, service=service, category=category, mac=mac)
 
     for reader_obj in info_reader_objects:
         reader_obj.addOnUpdateCallback(lambda reader_obj=reader_obj, mutex=mutex: printInfo(reader_obj, mutex))
@@ -59,5 +60,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+
     except:
-        pass
+        print(traceback.format_exc())

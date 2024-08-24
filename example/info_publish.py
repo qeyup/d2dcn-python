@@ -6,8 +6,7 @@ sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 
 import d2dcn
 import time
-
-
+import traceback
 
 
 def main():
@@ -54,5 +53,6 @@ def main():
 if __name__ == '__main__':
     try:
         main()
+
     except:
-        pass
+        print(traceback.format_exc())

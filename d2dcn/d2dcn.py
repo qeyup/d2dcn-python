@@ -810,6 +810,7 @@ class infoWriter():
         self.__shared.service = service
         self.__shared.category = category
         self.__shared.valueType = valueType
+        self.__thread = None
 
 
         if valueType == constants.valueTypes.BOOL or valueType == constants.valueTypes.BOOL_ARRAY:
@@ -931,6 +932,8 @@ class infoWriter():
             if data == constants.INFO_REQUEST:
                 shared.udp_socket.send(ip, port, typeTools.convertToASCII(shared.value, shared.valueType))
 
+        shared.udp_socket.close()
+
 
 class infoReader():
 
@@ -1022,6 +1025,9 @@ class infoReader():
                 with shared.callback_mutex:
                     for callback in shared.on_update_callback_list:
                         callback()
+
+        shared.mcast_socket.close()
+        shared.udp_socket.close()
 
 
     @property
@@ -1432,6 +1438,8 @@ class d2d():
             except:
                 pass
 
+        socket.close()
+
 
     def __tcpListenerThread(socket, service_container, command_callback, input_params, output_params):
 
@@ -1471,6 +1479,8 @@ class d2d():
 
                 except:
                     pass
+
+        connection.close()
 
 
     def __extractCommandInfo(data):
@@ -1535,11 +1545,11 @@ class d2d():
             return ""
 
         elif os.name != 'nt':
-            ipr = IPRoute().route('get', dst=dst)
-            if len(ipr) > 0:
-                return ipr[0].get_attr('RTA_PREFSRC')
-            else:
-                return "127.0.0.1"
+            route_obj = IPRoute()
+            ipr = route_obj.route('get', dst=dst)
+            ip = ipr[0].get_attr('RTA_PREFSRC') if len(ipr) > 0 else "127.0.0.1"
+            route_obj.close()
+            return ip
 
         else:
             return ""
@@ -1619,7 +1629,7 @@ class d2d():
         return self.__shared_table.updateTableEntry(self.__service_used_paths[name], [json.dumps(self.__service_container[name].map)])
 
 
-    def getAvailableComands(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
+    def getAvailableComands(self, name:str="", service:str="", category:str="", mac:str="", wait:int=0) -> list:
 
         search_command_path = self.__createRegexPath(mac, service, category, constants.COMMAND_LEVEL, name)
 
@@ -1705,7 +1715,7 @@ class d2d():
             return None
 
 
-    def getAvailableInfoReaders(self, mac:str="", service:str="", category:str="", name:str="", wait:int=0) -> list:
+    def getAvailableInfoReaders(self, name:str="", service:str="", category:str="", mac:str="", wait:int=0) -> list:
 
 
         search_info_path = self.__createRegexPath(mac, service, category, constants.INFO_LEVEL, name)
