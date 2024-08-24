@@ -1,8 +1,11 @@
+#!/usr/bin/python3
+
 import sys
-sys.path.append('../d2dcn/')
-sys.path.append('.')
+import os
+sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 
 import d2dcn
+import traceback
 
 
 COMMAND_ARG1 = "command_arg1"
@@ -11,61 +14,67 @@ RESPONSE_ARG1 = "response_arg1"
 
 
 def command_call(args):
-    print("comand call recived", args[COMMAND_ARG1])
-
     response = {}
     response[RESPONSE_ARG1] = "Recived!"
     return response
 
 
 def command_call2(args):
-    print("comand call recived", args[COMMAND_ARG1])
-
     response = {}
-    response[RESPONSE_ARG1] = []
+    response[RESPONSE_ARG1] = ["Recived!"]
     return response
 
 
 def main():
 
-    d2d_object = d2dcn.d2d(service="publish_command_example")
+    service=sys.argv[1] if len(sys.argv) > 1 else "publish_command_example"
+    d2d_object = d2dcn.d2d(service=service)
 
 
     # Command call 1
-    command_args = {}
-    command_args[COMMAND_ARG1] = {}
-    command_args[COMMAND_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.BOOL
+    command_args = d2dcn.commandArgsDef()
+    command_args.add(COMMAND_ARG1, d2dcn.constants.valueTypes.BOOL)
 
-    response_args = {}
-    response_args[RESPONSE_ARG1] = {}
-    response_args[RESPONSE_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.STRING
+    response_args = d2dcn.commandArgsDef()
+    response_args.add(RESPONSE_ARG1, d2dcn.constants.valueTypes.STRING, True)
 
-    command_category = "example"
-    command_name = "command_example1"
+    command1_category = "example"
+    command1_name = "command_example1"
 
-    d2d_object.addServiceCommand(command_call, command_name, command_args, response_args, command_category)
+    d2d_object.addServiceCommand(command_call, command1_name, command_args, response_args, command1_category)
 
 
     # Command call 2
-    command_args = {}
-    command_args[COMMAND_ARG1] = {}
-    command_args[COMMAND_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.BOOL_ARRAY
+    command_args = d2dcn.commandArgsDef()
+    command_args.add(COMMAND_ARG1, d2dcn.constants.valueTypes.BOOL_ARRAY)
 
-    response_args = {}
-    response_args[RESPONSE_ARG1] = {}
-    response_args[RESPONSE_ARG1][d2dcn.d2dConstants.infoField.TYPE] = d2dcn.d2dConstants.valueTypes.STRING_ARRAY
+    response_args = d2dcn.commandArgsDef()
+    response_args.add(RESPONSE_ARG1, d2dcn.constants.valueTypes.STRING_ARRAY, True)
 
-    command_category = "example"
-    command_name = "command_example2"
+    command2_category = "example"
+    command2_name = "command_example2"
 
-    d2d_object.addServiceCommand(command_call2, command_name, command_args, response_args, command_category)
+    d2d_object.addServiceCommand(command_call2, command2_name, command_args, response_args, command2_category)
 
 
-    print("wait calls")
-    d2d_object.waitThreads()
+    # Enable / Disable loop
+    command1_enable = True
+    command2_enable = True
+    while True:
 
-    print("Done!")
+        input("Enter to " + ("Disable " if command1_enable else "Enable ") + service + "/" +command1_name + "...")
+        command1_enable = not command1_enable
+        d2d_object.enableCommand(command1_name, command1_enable)
+
+
+        input("Enter to " + ("Disable " if command2_enable else "Enable ") + service + "/" +command2_name + "...")
+        command2_enable = not command2_enable
+        d2d_object.enableCommand(command2_name, command2_enable)
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+
+    except:
+        print(traceback.format_exc())

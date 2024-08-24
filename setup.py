@@ -12,8 +12,7 @@ if __name__ == '__main__':
         packages = ["d2dcn"],
         install_requires = [
             "psutil",
-            "paho-mqtt",
-            "ServiceDiscovery",
+            "SharedTableBroker",
             "pyroute2"
         ],
         author = "Javier Moreno Garcia",
