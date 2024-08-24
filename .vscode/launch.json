@@ -11,7 +11,9 @@
             "program": "${workspaceFolder}/test.py",
             "console": "integratedTerminal",
             "justMyCode": true,
-            "args": "${input:inPrompt}"
+            "args": [
+                "${input:test}"
+            ]
         },
         {
             "name": "Command publish example",
@@ -48,12 +50,17 @@
     ],
     "inputs": [
         {
-            "id": "inPrompt",
-            "type": "command",
-            "command": "memento.promptString",
-            "args": {
-                "id": "inPrompt"
-            }
+            "id": "test",
+            "description": "Select test to debug",
+            "type": "pickString",
+            "options": [
+                "d2dcnTest.test0_startStop",
+                "d2dcnTest.test1_Properties",
+                "d2dcnTest.test2_Command",
+                "d2dcnTest.test3_infoSharing",
+                "d2dcnTest"
+            ],
+            "default": "d2dcnTest"
         }
     ]
 }

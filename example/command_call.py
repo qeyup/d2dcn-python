@@ -1,9 +1,12 @@
+#!/usr/bin/python3
+
 import sys
-sys.path.append('../d2dcn/')
-sys.path.append('.')
+import os
+sys.path.append(os.path.dirname(__file__) + '/../d2dcn')
 
 import d2dcn
 import time
+import traceback
 
 
 COMMAND_ARG1 = "command_arg1"
@@ -18,32 +21,47 @@ def command_call(args):
 
 def main():
 
-    d2d_object = d2dcn.d2d(service="call_command_example")
-
-    found_commands = d2d_object.getAvailableComands(command="command_example1", wait=5)
-    print("Found", len(found_commands), "example1 commands")
-
-    for command_object in found_commands:
-        params = {}
-        params["command_arg1"] = True
-        result = command_object.call(params)
-        print("Command call result: ", result.success)
-        print(result if result.success else result.error)
-
-    
-    found_commands = d2d_object.getAvailableComands(command="command_example2", wait=5)
-    print("Found", len(found_commands), "example2 commands")
-
-    for command_object in found_commands:
-        params = {}
-        params["command_arg1"] = [True, True]
-        result = command_object.call(params)
-        print("Command call result: ", result.success)
-        print(result if result.success else result.error)
+    d2d_object = d2dcn.d2d()
 
 
-    print("Done!")
+    # Get available comand example 1
+    found_commands1 = d2d_object.getAvailableComands(name="command_example1", wait=5)
+    print("Found", len(found_commands1), "example1 commands")
+
+
+    # Get available comand example 2
+    found_commands2 = d2d_object.getAvailableComands(name="command_example2", wait=5)
+    print("Found", len(found_commands2), "example2 commands")
+
+
+    # Call loop
+    while len(found_commands1) + len(found_commands2) > 0:
+
+        # Call example 1
+        for command_object in found_commands1:
+            params = {}
+            params["command_arg1"] = True
+            result = command_object.call(params)
+            print("Command call1 result: ", result.success, "->", result if result.success else result.error)
+
+        # Call example 2
+        for command_object in found_commands2:
+            params = {}
+            params["command_arg1"] = [True, True]
+            result = command_object.call(params)
+            print("Command call2 result: ", result.success, "->", result if result.success else result.error)
+
+
+        print("Wait...\n\n")
+        time.sleep(2)
+
+
+    print("Not commands found!")
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+
+    except:
+        print(traceback.format_exc())
