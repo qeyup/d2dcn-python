@@ -12,7 +12,7 @@ if __name__ == '__main__':
         packages = ["d2dcn"],
         install_requires = [
             "psutil",
-            "SharedTableBroker",
+            "SharedTableBroker>=0.1.3",
             "pyroute2"
         ],
         author = "Javier Moreno Garcia",

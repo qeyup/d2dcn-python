@@ -42,9 +42,15 @@ class d2dcnTest(unittest.TestCase):
 
 
     def test0_startStop(self):
+        test_obj = d2dcn.d2d(service="test0_startStop", start=False)
+        test_obj.start()
+        test_obj.stop()
+
+
+    def test1_deleteInstance(self):
 
         def auxCall():
-            test_obj = d2dcn.d2d(service="test0_startStop")
+            test_obj = d2dcn.d2d(service="test1_deleteInstance")
             test_obj.addServiceCommand(lambda args : args, "test_command", {}, {}, d2dcnTest.category)
             comand = test_obj.getAvailableComands(name="test_*")[0]
             info_writer = test_obj.addInfoWriter("test_writer", d2dcn.constants.valueTypes.INT)
@@ -64,9 +70,9 @@ class d2dcnTest(unittest.TestCase):
         self.assertTrue(info_readers_weak_ref() == None, "reader object is not deleted")
 
 
-    def test1_Properties(self):
+    def test2_Properties(self):
 
-        test_obj= d2dcn.d2d(service="test1_Properties")
+        test_obj= d2dcn.d2d(service="test2_Properties")
         self.assertTrue(test_obj.mac != "", "Object has not MAC")
         self.assertTrue(test_obj.service != "Object has not service name")
 
@@ -90,10 +96,14 @@ class d2dcnTest(unittest.TestCase):
         self.assertTrue(info_reader.category == d2dcnTest.category, "incorrect category")
 
 
-    def test2_Command(self):
+    def test3_Command(self):
 
-        test1 = d2dcn.d2d(service="test2_Command_A")
-        test2 = d2dcn.d2d(service="test2_Command_B")
+        test1 = d2dcn.d2d(service="test3_Command_A")
+        test2 = d2dcn.d2d(service="test3_Command_B")
+
+        wait_mutex = threading.Lock()
+        wait_mutex.acquire()
+        test2.onCommandUpdate = lambda mac, service, category, name, wait_mutex=wait_mutex : wait_mutex.release() if wait_mutex.locked() else True
 
 
         # Register command with client 1
@@ -114,6 +124,18 @@ class d2dcnTest(unittest.TestCase):
         # Get comand from clien 2
         comands = test2.getAvailableComands(name=d2dcnTest.test_comand_name, wait=5)
         self.assertTrue(len(comands) > 0, "Not found command")
+
+
+        # Check args
+        self.assertTrue(comands[0].params.names == api_result.names, "Command args should be equal")
+        self.assertTrue(comands[0].response.names == api_result.names, "Response args should be equal")
+        for name in api_result.names:
+
+            self.assertTrue(comands[0].params.getArgType(name) == api_result.getArgType(name), "Arg type are not correct")
+            self.assertTrue(comands[0].params.isArgOptional(name) == api_result.isArgOptional(name), "Arg optional are not correct")
+
+            self.assertTrue(comands[0].response.getArgType(name) == api_result.getArgType(name), "Arg type are not correct")
+            self.assertTrue(comands[0].response.isArgOptional(name) == api_result.isArgOptional(name), "Arg optional are not correct")
 
 
         # Test command call. Missing non optional arg
@@ -166,10 +188,39 @@ class d2dcnTest(unittest.TestCase):
         self.assertFalse(result.success, "Commnd should fail")
 
 
-    def test3_infoSharing(self):
+        # Test empty lists
+        params = {}
+        params["arg1"] = 1
+        params["arg2"] = "string"
+        params["arg3"] = 1.2
+        params["arg4"] = True
+        params["arg5"] = []
+        params["arg6"] = []
+        params["arg7"] = []
+        params["arg8"] = []
+        result = comands[0].call(params)
+        self.assertTrue(result.success, "Commnd should be success")
 
-        test1= d2dcn.d2d(service="test3_infoSharing_A")
-        test2 = d2dcn.d2d(service="test3_infoSharing_B")
+
+        # Test enable/disable command
+        self.assertTrue(comands[0].enable == True, "Command is not enable")
+
+        self.assertTrue(test1.enableCommand(d2dcnTest.test_comand_name, False), "Error when disable command")
+        self.assertTrue(wait_mutex.acquire(timeout=5), "Wait change timeout")
+        self.assertTrue(comands[0].enable == False, "Command is enable")
+
+        result = comands[0].call(params)
+        self.assertFalse(result.success, "Commnd should not be success")
+
+        self.assertTrue(test1.enableCommand(d2dcnTest.test_comand_name, True), "Error when enbale command")
+        self.assertTrue(wait_mutex.acquire(timeout=5), "Wait change timeout")
+        self.assertTrue(comands[0].enable == True, "Command is not enable")
+
+
+    def test4_infoSharing(self):
+
+        test1= d2dcn.d2d(service="test4_infoSharing_A")
+        test2 = d2dcn.d2d(service="test4_infoSharing_B")
 
         wait_mutex = threading.Lock()
         wait_mutex.acquire()

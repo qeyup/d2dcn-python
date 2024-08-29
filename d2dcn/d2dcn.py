@@ -34,7 +34,7 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
     setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
 
 
-version = "0.5.0"
+version = "0.5.1"
 
 
 class constants():
@@ -84,10 +84,6 @@ class constants():
         REQUEST_PORT = "req_port"
         UPDATE_PORT = "update_port"
         TYPE = "type"
-
-        # Remove
-        EPOCH = "epoch"
-        VALUE = "value"
 
     class commandProtocol():
         JSON_UDP = "json-udp"
@@ -191,6 +187,7 @@ class udpRandomPortListener():
         super().__init__()
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.__sock.bind(('', 0))
         self.__sock.settimeout(0.1)
 
@@ -651,15 +648,41 @@ class typeTools():
 
 class commandArgsDef(dict):
 
-    def __init__(self):
+    def __init__(self, data={}):
         super().__init__()
+
+        if len(data) > 0:
+            for it in data:
+                self[it] = data[it]
+            self.__editable = False
+
+        else:
+            self.__editable = True
 
 
     def add(self, arg_name:str, arg_type:str, optional:bool=False):
-        self[arg_name] = {}
-        self[arg_name][constants.field.TYPE] = arg_type
-        if optional:
-            self[arg_name][constants.field.OPTIONAL] = optional
+        if self.__editable:
+            self[arg_name] = {}
+            self[arg_name][constants.field.TYPE] = arg_type
+
+            if optional:
+                self[arg_name][constants.field.OPTIONAL] = optional
+            return True
+
+        else:
+            return False
+
+    @property
+    def names(self):
+        return self.keys()
+
+
+    def getArgType(self, name):
+        return self[name][constants.field.TYPE] if name in self else None
+
+
+    def isArgOptional(self, name):
+        return self[name][constants.field.OPTIONAL] if name in self and constants.field.OPTIONAL in self[name] else False
 
 
 class commandResponse(dict):
@@ -698,6 +721,7 @@ class commandInterface():
         port:int, params:commandArgsDef, response:commandArgsDef, enable:bool, timeout:int):
         self.__name = name
         self.__mac = mac
+        self.__ip = ip
         self.__service = service
         self.__category = category
         self.configure(enable, params, response, protocol, ip, port, timeout)
@@ -738,6 +762,11 @@ class commandInterface():
 
 
     @property
+    def ip(self):
+        return self.__ip
+
+
+    @property
     def service(self):
         return self.__service
 
@@ -759,7 +788,7 @@ class commandInterface():
 
     @property
     def enable(self):
-        return self.__enable and self.__service_info.online
+        return self.__enable
 
 
     @property
@@ -941,6 +970,7 @@ class infoReader():
         self.__shared = container()
         self.__shared.name = name
         self.__shared.mac = mac
+        self.__shared.ip = ip
         self.__shared.service = service
         self.__shared.category = category
         self.__shared.valueType = valueType
@@ -987,9 +1017,7 @@ class infoReader():
             if self.__shared.value != None:
                 self.__shared.value = None
 
-                with self.__shared.callback_mutex:
-                    for callback in self.__shared.on_update_callback_list:
-                            callback()
+                infoReader.__callbackExec(self.__shared)
 
 
     def __del__(self):
@@ -1003,6 +1031,23 @@ class infoReader():
 
         if self.__thread != None:
             self.__thread.join()
+
+
+    def __callbackExec(shared):
+        with shared.callback_mutex:
+
+            remove_list = []
+            for weak_callback in shared.on_update_callback_list:
+                shared_calback = weak_callback()
+
+                if shared_calback:
+                    shared_calback()
+
+                else:
+                    remove_list.append(weak_callback)
+
+            for weak_callback in remove_list:
+                shared.on_update_callback_list.remove(weak_callback)
 
 
     def __read_updates_thread(shared):
@@ -1022,9 +1067,7 @@ class infoReader():
                     shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
                     shared.epoch = int(time.time())
 
-                with shared.callback_mutex:
-                    for callback in shared.on_update_callback_list:
-                        callback()
+                infoReader.__callbackExec(shared)
 
         shared.mcast_socket.close()
         shared.udp_socket.close()
@@ -1038,6 +1081,11 @@ class infoReader():
     @property
     def mac(self):
         return self.__shared.mac
+
+
+    @property
+    def ip(self):
+        return self.__shared.ip
 
 
     @property
@@ -1067,31 +1115,19 @@ class infoReader():
 
     @property
     def online(self):
-        with self.__shared.value_mutex:
-            return self.value != None
+        return self.value != None
 
 
     def addOnUpdateCallback(self, callback):
+        weak_ptr = weakref.ref(callback)
         with self.__shared.callback_mutex:
-            if callback not in self.__shared.on_update_callback_list:
-                self.__shared.on_update_callback_list.append(callback)
-
-
-    def removeOnUpdateCallback(self, callback):
-        with self.__shared.callback_mutex:
-            if callback in self.__shared.on_update_callback_list:
-                self.__shared.on_update_callback_list.remove(callback)
-
-
-    @property
-    def value(self):
-        with self.__shared.value_mutex:
-            return self.__shared.value
+            if weak_ptr not in self.__shared.on_update_callback_list:
+                self.__shared.on_update_callback_list.append(weak_ptr)
 
 
 class d2d():
 
-    def __init__(self, service=None, master=True):
+    def __init__(self, service=None, master=True, start=True):
 
         self.__shared = container()
 
@@ -1125,10 +1161,22 @@ class d2d():
         self.__shared.__commands = {}
         self.__shared.info_readers = {}
 
-        self.__shared_table = SharedTableBroker.SharedTableBroker(constants.BROKER_SERVICE_NAME, master)
+        self.__shared_table = SharedTableBroker.SharedTableBroker(constants.BROKER_SERVICE_NAME, master, False)
         self.__shared_table.onRemoveTableEntry = lambda client_id, entry_key, shared=self.__shared : d2d.__entryRemoved(client_id, entry_key, shared)
         self.__shared_table.onNewTableEntry = lambda client_id, entry_key, data, shared=self.__shared : d2d.__entryUpdated(client_id, entry_key, data, shared)
         self.__shared_table.onUpdateTableEntry = lambda client_id, entry_key, data, shared=self.__shared : d2d.__entryUpdated(client_id, entry_key, data, shared)
+
+
+        if start:
+            self.start()
+
+
+    def start(self):
+        self.__shared_table.start()
+
+
+    def stop(self):
+        self.__shared_table.stop()
 
 
     def __del__(self):
@@ -1200,6 +1248,7 @@ class d2d():
         with self.__shared.__callback_mutex:
             self.__shared.__info_added_callback = callback
 
+
     @property
     def onInfoUpdate(self):
         with self.__shared.__callback_mutex:
@@ -1238,8 +1287,8 @@ class d2d():
 
             # Notify
             with shared.__callback_mutex:
-                if shared.__info_remove_callback:
-                    shared.__info_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
+                if shared.__command_remove_callback:
+                    shared.__command_remove_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
         elif path_info.mode == constants.INFO_LEVEL:
 
@@ -1305,53 +1354,45 @@ class d2d():
                         shared.__info_added_callback(path_info.mac, path_info.service, path_info.category, path_info.name)
 
 
-    def __createPath(mac:str, service:str, category:str, mode:str, name:str) -> str:
-
-        if mode not in [constants.COMMAND_LEVEL, constants.INFO_LEVEL]:
-            return None
-
-        path = constants.PREFIX + "/"
-        path += mac + "/"
-        path += service + "/"
-        path += mode + "/"
-        path += category + "/"
-        path += name
-
-        return path
+    def createInfoWriterUID(mac, service, category, name) -> str:
+        return d2d.__createUID(mac, service, category, constants.INFO_LEVEL, name)
 
 
-    def __createRegexPath(self, mac, service, category, mode, name) -> str:
+    def createCommandUID(mac, service, category, name) -> str:
+        return d2d.__createUID(mac, service, category, constants.COMMAND_LEVEL, name)
+
+
+    def __createUID(mac, service, category, mode, name) -> str:
 
         if mode not in [constants.COMMAND_LEVEL, constants.INFO_LEVEL]:
             return ""
 
-        regex_path = constants.MQTT_PREFIX + "/"
+        d2d_path = constants.MQTT_PREFIX + "/"
 
         if mac != "":
-            regex_path += mac + "/"
+            d2d_path += mac + "/"
         else:
-            regex_path += ".*/"
+            d2d_path += ".*/"
 
         if service != "":
-            regex_path += service + "/"
+            d2d_path += service + "/"
         else:
-            regex_path += ".*/"
+            d2d_path += ".*/"
 
-        regex_path += mode + "/"
+        d2d_path += mode + "/"
 
         if category != "":
-            regex_path += category + "/"
+            d2d_path += category + "/"
         else:
-            regex_path += ".*/"
+            d2d_path += ".*/"
 
         if name != "":
-            regex_path += name
+            d2d_path += name
         else:
-            regex_path += ".*"
+            d2d_path += ".*"
 
-        regex_path = regex_path.replace("#", "")
 
-        return regex_path
+        return d2d_path
 
 
     def __checkInOutDefinedField(field) -> bool:
@@ -1491,8 +1532,8 @@ class d2d():
             rc.protocol = command_info[constants.commandField.PROTOCOL]
             rc.ip = command_info[constants.commandField.IP]
             rc.port = command_info[constants.commandField.PORT]
-            rc.params = command_info[constants.commandField.INPUT]
-            rc.response = command_info[constants.commandField.OUTPUT]
+            rc.params = commandArgsDef(command_info[constants.commandField.INPUT])
+            rc.response = commandArgsDef(command_info[constants.commandField.OUTPUT])
             rc.enable = True if constants.commandField.ENABLE not in command_info else command_info[constants.commandField.ENABLE]
             rc.timeout = 5 if constants.commandField.TIMEOUT not in command_info else command_info[constants.commandField.TIMEOUT]
             return rc
@@ -1603,7 +1644,7 @@ class d2d():
 
 
         # Register command
-        command_path = d2d.__createPath(self.__mac, self.__service, category, constants.COMMAND_LEVEL, name)
+        command_path = d2d.createCommandUID(self.__mac, self.__service, category, name)
         if not command_path:
             return False
 
@@ -1631,7 +1672,7 @@ class d2d():
 
     def getAvailableComands(self, name:str="", service:str="", category:str="", mac:str="", wait:int=0) -> list:
 
-        search_command_path = self.__createRegexPath(mac, service, category, constants.COMMAND_LEVEL, name)
+        search_command_path = d2d.createCommandUID(mac, service, category, name)
 
         commands = []
         start = time.time()
@@ -1685,7 +1726,7 @@ class d2d():
         if category == "":
             category = constants.category.GENERIC
 
-        info_path = d2d.__createPath(self.__mac, self.__service, category, constants.INFO_LEVEL, name)
+        info_path = d2d.createInfoWriterUID(self.__mac, self.__service, category, name)
 
 
         with self.__shared.__registered_mutex:
@@ -1718,7 +1759,7 @@ class d2d():
     def getAvailableInfoReaders(self, name:str="", service:str="", category:str="", mac:str="", wait:int=0) -> list:
 
 
-        search_info_path = self.__createRegexPath(mac, service, category, constants.INFO_LEVEL, name)
+        search_info_path = d2d.createInfoWriterUID(mac, service, category, name)
 
         info_reader_objs = []
         start = time.time()

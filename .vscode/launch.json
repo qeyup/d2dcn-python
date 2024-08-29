@@ -55,9 +55,10 @@
             "type": "pickString",
             "options": [
                 "d2dcnTest.test0_startStop",
-                "d2dcnTest.test1_Properties",
-                "d2dcnTest.test2_Command",
-                "d2dcnTest.test3_infoSharing",
+                "d2dcnTest.test1_deleteInstance",
+                "d2dcnTest.test2_Properties",
+                "d2dcnTest.test3_Command",
+                "d2dcnTest.test4_infoSharing",
                 "d2dcnTest"
             ],
             "default": "d2dcnTest"
