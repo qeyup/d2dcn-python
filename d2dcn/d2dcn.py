@@ -34,7 +34,7 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
     setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
 
 
-version = "0.5.1"
+version = "0.5.2"
 
 
 class constants():
@@ -731,8 +731,13 @@ class commandInterface():
 
         if params:
             self.__params = params
+        else:
+            self.__params = commandArgsDef()
+
         if response:
             self.__response = response
+        else:
+            self.__response = commandArgsDef()
 
         self.__protocol = protocol
         self.__enable = enable
@@ -1100,7 +1105,8 @@ class infoReader():
 
     @property
     def value(self):
-        return self.__shared.value
+        with self.__shared.value_mutex:
+            return self.__shared.value
 
 
     @property
@@ -1110,12 +1116,14 @@ class infoReader():
 
     @property
     def epoch(self):
-        return self.__shared.epoch
+        with self.__shared.value_mutex:
+            return self.__shared.epoch
 
 
     @property
     def online(self):
-        return self.value != None
+        with self.__shared.value_mutex:
+            return self.value != None
 
 
     def addOnUpdateCallback(self, callback):
@@ -1370,24 +1378,24 @@ class d2d():
         d2d_path = constants.MQTT_PREFIX + "/"
 
         if mac != "":
-            d2d_path += mac + "/"
+            d2d_path += mac.replace("/", "-") + "/"
         else:
             d2d_path += ".*/"
 
         if service != "":
-            d2d_path += service + "/"
+            d2d_path += service.replace("/", "-")  + "/"
         else:
             d2d_path += ".*/"
 
         d2d_path += mode + "/"
 
         if category != "":
-            d2d_path += category + "/"
+            d2d_path += category.replace("/", "-")  + "/"
         else:
             d2d_path += ".*/"
 
         if name != "":
-            d2d_path += name
+            d2d_path += name.replace("/", "-") 
         else:
             d2d_path += ".*"
 
