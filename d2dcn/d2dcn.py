@@ -34,7 +34,7 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
     setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
 
 
-version = "0.5.2"
+version = "0.5.3"
 
 
 class constants():
@@ -1057,12 +1057,14 @@ class infoReader():
 
     def __read_updates_thread(shared):
 
-        with shared.value_mutex:
-            shared.udp_socket.send(constants.INFO_REQUEST)
-            data = shared.udp_socket.read(timeout=5)
-            if data != None:
+        shared.udp_socket.send(constants.INFO_REQUEST)
+        data = shared.udp_socket.read(timeout=5)
+        if data != None:
+            with shared.value_mutex:
                 shared.value = typeTools.convevertFromASCII(data.decode(), shared.valueType)
                 shared.epoch = int(time.time())
+
+            infoReader.__callbackExec(shared)
 
 
         while shared.run:
