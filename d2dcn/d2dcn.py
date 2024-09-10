@@ -34,14 +34,14 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
     setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
 
 
-version = "0.5.3"
+version = "0.5.4"
 
 
 class constants():
     BROKER_SERVICE_NAME = "D2D_TABLE"
     BROKER_PORT = 18832
     CLIENT_DISCOVER_WAIT = 5
-    MTU = 4096
+    MTU = 500
     END_OF_TX = b'\xFF'
     MAX_LISTEN_TCP_SOKETS = -1
     MQTT_PREFIX = "d2dcn"
