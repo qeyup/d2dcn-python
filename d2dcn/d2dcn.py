@@ -34,7 +34,7 @@ if not hasattr(socket, "IP_ADD_SOURCE_MEMBERSHIP"):
     setattr(socket, "IP_ADD_SOURCE_MEMBERSHIP", 39)
 
 
-version = "0.5.4"
+version = "0.5.5"
 
 
 class constants():
@@ -51,6 +51,9 @@ class constants():
     STATE = "state"
     INFO_MULTICAST_GROUP = "232.10.10.10"
     INFO_REQUEST = b"req"
+    TX_TIMEOUT = 0.1
+    TX_TIMEOUT_MAX_COUNT = 50
+    RX_TIMEOUT = 0.1
 
     class state:
         OFFLINE = "offline"
@@ -68,6 +71,8 @@ class constants():
         TIMEOUT_ERROR = "Timeout error"
         EXCEPTION_ERROR = "Exception raised"
         NOT_ENABLE_ERROR = "Command not enable"
+        INCOMPLETE_RESPONSE = "Incomplete response"
+        INVALID_RESPONSE = "Invalid response"
 
     class commandField():
         PROTOCOL = "protocol"
@@ -119,7 +124,7 @@ class mcast():
         self.__open = True
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
 
-        self.__sock.settimeout(0.1)
+        self.__sock.settimeout(constants.RX_TIMEOUT)
 
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         if src != "":
@@ -189,7 +194,7 @@ class udpRandomPortListener():
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.__sock.bind(('', 0))
-        self.__sock.settimeout(0.1)
+        self.__sock.settimeout(constants.RX_TIMEOUT)
 
 
     def __del__(self):
@@ -218,10 +223,25 @@ class udpRandomPortListener():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
+        bytes_send = 0
+        timeout_retry = 0
+        while len(msg) > bytes_send:
+            try:
+                bytes_send += self.__sock.sendto(msg[bytes_send:], (ip, port))
+                timeout_retry = 0
 
-        for chn in chn_msg:
-            self.__sock.sendto(chn, (ip, port))
+            except socket.timeout:
+                if timeout_retry >= constants.TX_TIMEOUT_MAX_COUNT:
+                    return False
+
+                else:
+                    timeout_retry += 1
+                    time.sleep(constants.TX_TIMEOUT)
+
+            except:
+                return False
+
+        return True
 
 
     @property
@@ -240,7 +260,7 @@ class udpClient():
         self.__remote_ip = ip
         self.__remote_port = port
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.__sock.settimeout(0.1)
+        self.__sock.settimeout(constants.RX_TIMEOUT)
 
 
     def __del__(self):
@@ -269,10 +289,25 @@ class udpClient():
         if isinstance(msg, str):
             msg = msg.encode()
 
-        chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
+        bytes_send = 0
+        timeout_retry = 0
+        while len(msg) > bytes_send:
+            try:
+                bytes_send += self.__sock.sendto(msg[bytes_send:], (self.__remote_ip, self.__remote_port))
+                timeout_retry = 0
 
-        for chn in chn_msg:
-            self.__sock.sendto(chn, (self.__remote_ip, self.__remote_port))
+            except socket.timeout:
+                if timeout_retry >= constants.TX_TIMEOUT_MAX_COUNT:
+                    return False
+
+                else:
+                    timeout_retry += 1
+                    time.sleep(constants.TX_TIMEOUT)
+
+            except:
+                return False
+
+        return True
 
 
     @property
@@ -311,7 +346,7 @@ class tcpListener():
             self.__ip = ip
             self.__port = port
             self.__open = True
-            self.__sock.settimeout(0.1)
+            self.__sock.settimeout(constants.RX_TIMEOUT)
 
 
         def read(self, timeout=-1):
@@ -343,14 +378,23 @@ class tcpListener():
             if isinstance(msg, str):
                 msg = msg.encode()
 
-            chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
+            bytes_send = 0
+            timeout_retry = 0
+            while len(msg) > bytes_send:
+                try:
+                    bytes_send += self.__sock.send(msg[bytes_send:])
+                    timeout_retry = 0
 
-            try:
-                for chn in chn_msg:
-                    self.__sock.sendall(chn)
+                except socket.timeout:
+                    if timeout_retry >= constants.TX_TIMEOUT_MAX_COUNT:
+                        return False
 
-            except:
-                return False
+                    else:
+                        timeout_retry += 1
+                        time.sleep(constants.TX_TIMEOUT)
+
+                except:
+                    return False
 
             return True
 
@@ -385,7 +429,7 @@ class tcpListener():
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.__sock.bind(('', port))
-        self.__sock.settimeout(0.1)
+        self.__sock.settimeout(constants.RX_TIMEOUT)
         self.__sock.listen(max_connections)
 
 
@@ -426,7 +470,7 @@ class tcpClient():
         self.__remote_ip = ip
         self.__remote_port = port
         self.__sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.__sock.settimeout(0.1)
+        self.__sock.settimeout(constants.RX_TIMEOUT)
 
 
     def __del__(self):
@@ -466,21 +510,25 @@ class tcpClient():
             if isinstance(msg, str):
                 msg = msg.encode()
 
-            chn_msg = [msg[idx : idx + constants.MTU] for idx in range(0, len(msg), constants.MTU)]
-            while True:
-
+            bytes_send = 0
+            timeout_retry = 0
+            while len(msg) > bytes_send:
                 try:
-                    for chn in chn_msg:
-                        self.__sock.sendall(chn)
+                    bytes_send += self.__sock.send(msg[bytes_send:])
+                    timeout_retry = 0
 
-                    return True
-
-                except:
-                    self.close()
-                    if not self.__connect():
+                except socket.timeout:
+                    if timeout_retry >= constants.TX_TIMEOUT_MAX_COUNT:
                         return False
 
-        return False
+                    else:
+                        timeout_retry += 1
+                        time.sleep(constants.TX_TIMEOUT)
+
+                except:
+                    return False
+
+        return True
 
 
     @property
@@ -820,12 +868,14 @@ class commandInterface():
                     if read_response:
                         response += read_response.decode()
                     else:
+                        if response.startswith("{"):
+                            response = constants.commandErrorMsg.INCOMPLETE_RESPONSE
                         break
             else:
                 response = constants.commandErrorMsg.TIMEOUT_ERROR
 
         except:
-            pass
+            response = constants.commandErrorMsg.INVALID_RESPONSE
 
 
         return commandResponse(response) 
